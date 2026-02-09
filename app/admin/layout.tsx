@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { AdminAuthProvider } from '@/contexts/AdminAuthContext';
+import { CategoriesProvider } from '@/contexts/CategoriesContext';
 import AdminLayoutWrapper from './AdminLayoutWrapper';
 
 interface AdminLayoutProps {
@@ -15,12 +16,18 @@ export default function AdminRootLayout({ children }: AdminLayoutProps) {
 
   // Don't wrap login page with AdminLayoutWrapper
   if (isLoginPage) {
-    return <AdminAuthProvider>{children}</AdminAuthProvider>;
+    return (
+      <AdminAuthProvider>
+        <CategoriesProvider>{children}</CategoriesProvider>
+      </AdminAuthProvider>
+    );
   }
 
   return (
     <AdminAuthProvider>
-      <AdminLayoutWrapper>{children}</AdminLayoutWrapper>
+      <CategoriesProvider>
+        <AdminLayoutWrapper>{children}</AdminLayoutWrapper>
+      </CategoriesProvider>
     </AdminAuthProvider>
   );
 }

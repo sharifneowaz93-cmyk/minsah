@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAdminAuth, PERMISSIONS } from '@/contexts/AdminAuthContext';
+import { useCategories, type Category, type Subcategory } from '@/contexts/CategoriesContext';
 import {
   Search,
   Plus,
@@ -18,23 +19,6 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-interface Subcategory {
-  name: string;
-  items: string[];
-}
-
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  href: string;
-  icon?: string;
-  subcategories: Subcategory[];
-  productCount: number;
-  status: 'active' | 'inactive';
-  createdAt: string;
-}
-
 interface CategoryFormData {
   name: string;
   status: 'active' | 'inactive';
@@ -43,113 +27,7 @@ interface CategoryFormData {
 
 export default function CategoriesPage() {
   const { hasPermission } = useAdminAuth();
-  const [categories, setCategories] = useState<Category[]>([
-    {
-      id: '1',
-      name: 'Make Up',
-      slug: 'make-up',
-      href: '/shop?category=Make Up',
-      productCount: 156,
-      status: 'active',
-      createdAt: '2024-01-01',
-      subcategories: [
-        { name: 'Face', items: ['Foundation', 'Concealer', 'Blush', 'Primer', 'Powder', 'Contour'] },
-        { name: 'Eyes', items: ['Eyeshadow', 'Eyeliner', 'Mascara', 'Kajal', 'Eyebrow', 'Eye Primer'] },
-        { name: 'Lips', items: ['Lipstick', 'Lip Gloss', 'Lip Balm', 'Lip Liner', 'Lip Stain'] },
-        { name: 'Nails', items: ['Nail Polish', 'Nail Art', 'Nail Care', 'Manicure'] }
-      ],
-    },
-    {
-      id: '2',
-      name: 'Skin care',
-      slug: 'skin-care',
-      href: '/shop?category=Skin care',
-      productCount: 203,
-      status: 'active',
-      createdAt: '2024-01-01',
-      subcategories: [
-        { name: 'Cleansers', items: ['Face Wash', 'Micellar Water', 'Cleansing Oil', 'Wipes'] },
-        { name: 'Moisturizers', items: ['Day Cream', 'Night Cream', 'Serum', 'Face Oil'] },
-        { name: 'Sunscreen', items: ['SPF 30+', 'SPF 50+', 'Mineral', 'Tinted'] },
-        { name: 'Treatment', items: ['Anti-Aging', 'Acne Care', 'Brightening', 'Hydration'] }
-      ],
-    },
-    {
-      id: '3',
-      name: 'Hair care',
-      slug: 'hair-care',
-      href: '/shop?category=Hair care',
-      productCount: 98,
-      status: 'active',
-      createdAt: '2024-01-01',
-      subcategories: [
-        { name: 'Shampoo', items: ['Anti-Dandruff', 'Hair Fall', 'Color Protection', 'Volume'] },
-        { name: 'Conditioner', items: ['Daily Use', 'Deep Conditioner', 'Leave-In', 'Color Safe'] },
-        { name: 'Hair Treatments', items: ['Hair Oil', 'Hair Mask', 'Serum', 'Heat Protectant'] },
-        { name: 'Styling', items: ['Gel', 'Mousse', 'Hair Spray', 'Cream', 'Wax'] }
-      ],
-    },
-    {
-      id: '4',
-      name: 'Perfume',
-      slug: 'perfume',
-      href: '/shop?category=Perfume',
-      productCount: 134,
-      status: 'active',
-      createdAt: '2024-01-01',
-      subcategories: [
-        { name: 'Women', items: ['Floral', 'Fresh', 'Oriental', 'Woody'] },
-        { name: 'Men', items: ['Citrus', 'Woody', 'Spicy', 'Aquatic'] },
-        { name: 'Unisex', items: ['Fresh', 'Woody', 'Citrus', 'Musk'] },
-        { name: 'Attar', items: ['Traditional', 'Arabian', 'Luxury', 'Premium'] }
-      ],
-    },
-    {
-      id: '5',
-      name: 'SPA',
-      slug: 'spa',
-      href: '/shop?category=SPA',
-      productCount: 67,
-      status: 'active',
-      createdAt: '2024-01-01',
-      subcategories: [
-        { name: 'Body Treatments', items: ['Body Scrub', 'Body Butter', 'Massage Oil', 'Body Wrap'] },
-        { name: 'Facial Kits', items: ['Facial Masks', 'Peel Off Masks', 'Sheet Masks', 'Cream Masks'] },
-        { name: 'Aromatherapy', items: ['Essential Oils', 'Diffusers', 'Candles', 'Bath Salts'] },
-        { name: 'Relaxation', items: ['Bath Bombs', 'Shower Gels', 'Pampering Kits'] }
-      ],
-    },
-    {
-      id: '6',
-      name: 'Nails',
-      slug: 'nails',
-      href: '/shop?category=Nails',
-      productCount: 45,
-      status: 'active',
-      createdAt: '2024-01-01',
-      subcategories: [
-        { name: 'Nail Polish', items: ['Regular', 'Gel', 'Matte', 'Glossy'] },
-        { name: 'Nail Care', items: ['Cuticle Oil', 'Nail Strengtheners', 'Nail Growth'] },
-        { name: 'Nail Art', items: ['Stickers', 'Gems', 'Tools', 'Decorations'] },
-        { name: 'Manicure', items: ['Kits', 'Tools', 'Buffers', 'Files'] }
-      ],
-    },
-    {
-      id: '7',
-      name: 'Combo',
-      slug: 'combo',
-      href: '/shop?category=Combo',
-      productCount: 89,
-      status: 'active',
-      createdAt: '2024-01-01',
-      subcategories: [
-        { name: '1001-1500 Taka Combo', items: ['Makeup Combo', 'Skincare Combo', 'Haircare Combo', 'Body Care Combo'] },
-        { name: '1501-2000 Taka Combo', items: ['Premium Makeup Set', 'Facial Kit Combo', 'Hair Treatment Set', 'Spa Collection'] },
-        { name: '2001-2500 Taka Combo', items: ['Luxury Beauty Box', 'Complete Skincare Set', 'Professional Makeup Kit', 'Pamper Package'] },
-        { name: '2501-3000 Taka Combo', items: ['Deluxe Beauty Set', 'Ultimate Skincare', 'Pro Makeup Collection', 'Total Body Care'] }
-      ],
-    },
-  ]);
+  const { categories, saveCategories } = useCategories();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -258,20 +136,19 @@ export default function CategoriesPage() {
 
     if (editingCategoryId) {
       // Update existing category
-      setCategories(prev =>
-        prev.map(cat =>
-          cat.id === editingCategoryId
-            ? {
-                ...cat,
-                name: formData.name,
-                slug: generateSlug(formData.name),
-                href: `/shop?category=${formData.name}`,
-                status: formData.status,
-                subcategories: formData.subcategories,
-              }
-            : cat
-        )
+      const updatedCategories = categories.map(cat =>
+        cat.id === editingCategoryId
+          ? {
+              ...cat,
+              name: formData.name,
+              slug: generateSlug(formData.name),
+              href: `/shop?category=${formData.name}`,
+              status: formData.status,
+              subcategories: formData.subcategories,
+            }
+          : cat
       );
+      saveCategories(updatedCategories);
     } else {
       // Add new category
       const newCategory: Category = {
@@ -284,7 +161,7 @@ export default function CategoriesPage() {
         productCount: 0,
         createdAt: new Date().toISOString(),
       };
-      setCategories(prev => [...prev, newCategory]);
+      saveCategories([...categories, newCategory]);
     }
 
     closeModal();
@@ -306,7 +183,7 @@ export default function CategoriesPage() {
   const handleDeleteCategory = (categoryId: string) => {
     const category = categories.find(cat => cat.id === categoryId);
     if (confirm(`Are you sure you want to delete "${category?.name}"? This will affect all products in this category.`)) {
-      setCategories(categories.filter(cat => cat.id !== categoryId));
+      saveCategories(categories.filter(cat => cat.id !== categoryId));
     }
   };
 
