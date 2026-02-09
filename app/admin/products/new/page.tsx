@@ -41,6 +41,8 @@ interface ProductFormData {
   // Basic Info
   name: string;
   category: string;
+  subcategory: string;
+  item: string;
   brand: string;
   originCountry: string;
   status: 'active' | 'inactive' | 'out_of_stock';
@@ -94,14 +96,82 @@ interface ProductFormData {
   relatedProducts: string;
 }
 
-const categories = [
-  'Make Up',
-  'SPA',
-  'Perfume',
-  'Nails',
-  'Skin care',
-  'Hair care',
-  'Combo',
+interface Subcategory {
+  name: string;
+  items: string[];
+}
+
+interface Category {
+  name: string;
+  subcategories: Subcategory[];
+}
+
+const categoriesData: Category[] = [
+  {
+    name: 'Make Up',
+    subcategories: [
+      { name: 'Face', items: ['Foundation', 'Concealer', 'Blush', 'Primer', 'Powder', 'Contour'] },
+      { name: 'Eyes', items: ['Eyeshadow', 'Eyeliner', 'Mascara', 'Kajal', 'Eyebrow', 'Eye Primer'] },
+      { name: 'Lips', items: ['Lipstick', 'Lip Gloss', 'Lip Balm', 'Lip Liner', 'Lip Stain'] },
+      { name: 'Nails', items: ['Nail Polish', 'Nail Art', 'Nail Care', 'Manicure'] }
+    ]
+  },
+  {
+    name: 'SPA',
+    subcategories: [
+      { name: 'Body Treatments', items: ['Body Scrub', 'Body Butter', 'Massage Oil', 'Body Wrap'] },
+      { name: 'Facial Kits', items: ['Facial Masks', 'Peel Off Masks', 'Sheet Masks', 'Cream Masks'] },
+      { name: 'Aromatherapy', items: ['Essential Oils', 'Diffusers', 'Candles', 'Bath Salts'] },
+      { name: 'Relaxation', items: ['Bath Bombs', 'Shower Gels', 'Pampering Kits'] }
+    ]
+  },
+  {
+    name: 'Perfume',
+    subcategories: [
+      { name: 'Women', items: ['Floral', 'Fresh', 'Oriental', 'Woody'] },
+      { name: 'Men', items: ['Citrus', 'Woody', 'Spicy', 'Aquatic'] },
+      { name: 'Unisex', items: ['Fresh', 'Woody', 'Citrus', 'Musk'] },
+      { name: 'Attar', items: ['Traditional', 'Arabian', 'Luxury', 'Premium'] }
+    ]
+  },
+  {
+    name: 'Nails',
+    subcategories: [
+      { name: 'Nail Polish', items: ['Regular', 'Gel', 'Matte', 'Glossy'] },
+      { name: 'Nail Care', items: ['Cuticle Oil', 'Nail Strengtheners', 'Nail Growth'] },
+      { name: 'Nail Art', items: ['Stickers', 'Gems', 'Tools', 'Decorations'] },
+      { name: 'Manicure', items: ['Kits', 'Tools', 'Buffers', 'Files'] }
+    ]
+  },
+  {
+    name: 'Skin care',
+    subcategories: [
+      { name: 'Cleansers', items: ['Face Wash', 'Micellar Water', 'Cleansing Oil', 'Wipes'] },
+      { name: 'Moisturizers', items: ['Day Cream', 'Night Cream', 'Serum', 'Face Oil'] },
+      { name: 'Sunscreen', items: ['SPF 30+', 'SPF 50+', 'Mineral', 'Tinted'] },
+      { name: 'Treatment', items: ['Anti-Aging', 'Acne Care', 'Brightening', 'Hydration'] }
+    ]
+  },
+  {
+    name: 'Hair care',
+    subcategories: [
+      { name: 'Shampoo', items: ['Anti-Dandruff', 'Hair Fall', 'Color Protection', 'Volume'] },
+      { name: 'Conditioner', items: ['Daily Use', 'Deep Conditioner', 'Leave-In', 'Color Safe'] },
+      { name: 'Hair Treatments', items: ['Hair Oil', 'Hair Mask', 'Serum', 'Heat Protectant'] },
+      { name: 'Styling', items: ['Gel', 'Mousse', 'Hair Spray', 'Cream', 'Wax'] }
+    ]
+  },
+  {
+    name: 'Combo',
+    subcategories: [
+      { name: '1001-1500 Taka Combo', items: ['Makeup Combo', 'Skincare Combo', 'Haircare Combo', 'Body Care Combo'] },
+      { name: '1501-2000 Taka Combo', items: ['Premium Makeup Set', 'Facial Kit Combo', 'Hair Treatment Set', 'Spa Collection'] },
+      { name: '2001-2500 Taka Combo', items: ['Luxury Beauty Box', 'Complete Skincare Set', 'Professional Makeup Kit', 'Pamper Package'] },
+      { name: '2501-3000 Taka Combo', items: ['Deluxe Beauty Set', 'Ultimate Skincare', 'Pro Makeup Collection', 'Total Body Care'] },
+      { name: '3001-3500 Taka Combo', items: ['Elite Beauty Bundle', 'Premium Spa Set', 'Master Makeup Kit', 'Complete Wellness'] },
+      { name: '3501-5000 Taka Combo', items: ['Ultimate Beauty Collection', 'Luxury Spa Experience', 'Professional Beauty Kit', 'Complete Makeover Set'] }
+    ]
+  },
 ];
 
 const brands = [
@@ -146,6 +216,8 @@ export default function NewProductPage() {
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     category: 'Make Up',
+    subcategory: '',
+    item: '',
     brand: '',
     originCountry: 'Bangladesh (Local)',
     status: 'active',
@@ -599,7 +671,7 @@ export default function NewProductPage() {
               {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
                   Category *
@@ -608,14 +680,76 @@ export default function NewProductPage() {
                   id="category"
                   name="category"
                   value={formData.category}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      category: e.target.value,
+                      subcategory: '',
+                      item: '',
+                    }));
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 >
-                  {categories.map(category => (
-                    <option key={category} value={category}>
-                      {category}
+                  {categoriesData.map(category => (
+                    <option key={category.name} value={category.name}>
+                      {category.name}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="subcategory" className="block text-sm font-medium text-gray-700 mb-1">
+                  Subcategory
+                </label>
+                <select
+                  id="subcategory"
+                  name="subcategory"
+                  value={formData.subcategory}
+                  onChange={(e) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      subcategory: e.target.value,
+                      item: '',
+                    }));
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  disabled={!formData.category}
+                >
+                  <option value="">Select subcategory</option>
+                  {categoriesData
+                    .find(cat => cat.name === formData.category)
+                    ?.subcategories.map(subcat => (
+                      <option key={subcat.name} value={subcat.name}>
+                        {subcat.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
+                  Product Type/Item
+                </label>
+                <select
+                  id="item"
+                  name="item"
+                  value={formData.item}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  disabled={!formData.subcategory}
+                >
+                  <option value="">Select item</option>
+                  {categoriesData
+                    .find(cat => cat.name === formData.category)
+                    ?.subcategories.find(sub => sub.name === formData.subcategory)
+                    ?.items.map(item => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
                 </select>
               </div>
 
