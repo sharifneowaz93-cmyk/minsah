@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAdminAuth, PERMISSIONS } from '@/contexts/AdminAuthContext';
+import { useProducts } from '@/contexts/ProductsContext';
 import {
   Search,
   Plus,
@@ -15,21 +16,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatPrice, convertUSDtoBDT } from '@/utils/currency';
-
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  originalPrice: number;
-  stock: number;
-  status: 'active' | 'inactive' | 'out_of_stock';
-  image: string;
-  rating: number;
-  reviews: number;
-  createdAt: string;
-  featured: boolean;
-}
+import type { Product } from '@/contexts/ProductsContext';
 
 interface ProductFilters {
   search: string;
@@ -60,78 +47,7 @@ const sortOptions = [
 
 export default function ProductsPage() {
   const { hasPermission } = useAdminAuth();
-  const [products, setProducts] = useState<Product[]>([
-    {
-      id: '1',
-      name: 'Luxury Foundation Pro',
-      category: 'Make Up',
-      price: 45.99,
-      originalPrice: 65.99,
-      stock: 125,
-      status: 'active',
-      image: '/products/foundation.jpg',
-      rating: 4.5,
-      reviews: 234,
-      createdAt: '2024-01-10',
-      featured: true,
-    },
-    {
-      id: '2',
-      name: 'Organic Face Serum',
-      category: 'Skin care',
-      price: 89.99,
-      originalPrice: 120.00,
-      stock: 0,
-      status: 'out_of_stock',
-      image: '/products/serum.jpg',
-      rating: 4.8,
-      reviews: 156,
-      createdAt: '2024-01-08',
-      featured: false,
-    },
-    {
-      id: '3',
-      name: 'Professional Nail Kit',
-      category: 'Nails',
-      price: 34.99,
-      originalPrice: 45.00,
-      stock: 89,
-      status: 'active',
-      image: '/products/nail-kit.jpg',
-      rating: 4.2,
-      reviews: 89,
-      createdAt: '2024-01-05',
-      featured: false,
-    },
-    {
-      id: '4',
-      name: 'Premium Perfume Set',
-      category: 'Perfume',
-      price: 156.99,
-      originalPrice: 200.00,
-      stock: 45,
-      status: 'active',
-      image: '/products/perfume.jpg',
-      rating: 4.9,
-      reviews: 412,
-      createdAt: '2024-01-03',
-      featured: true,
-    },
-    {
-      id: '5',
-      name: 'Hair Care Bundle',
-      category: 'Hair care',
-      price: 67.99,
-      originalPrice: 85.00,
-      stock: 12,
-      status: 'active',
-      image: '/products/hair-care.jpg',
-      rating: 4.6,
-      reviews: 178,
-      createdAt: '2024-01-01',
-      featured: false,
-    },
-  ]);
+  const { products, deleteProduct } = useProducts();
 
   const [filters, setFilters] = useState<ProductFilters>({
     search: '',
