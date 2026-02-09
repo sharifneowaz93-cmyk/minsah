@@ -111,7 +111,9 @@ export default function ProductsPage() {
     if (selectedProducts.length === 0) return;
 
     if (confirm(`Are you sure you want to delete ${selectedProducts.length} product(s)?`)) {
-      setProducts(products.filter(p => !selectedProducts.includes(p.id)));
+      selectedProducts.forEach(productId => {
+        deleteProduct(productId);
+      });
       setSelectedProducts([]);
     }
   };
