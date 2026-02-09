@@ -4,6 +4,11 @@
   --background: #ffffff;
   --foreground: #171717;
 
+  /* Font families loaded via Google Fonts link */
+  --font-tenor-sans: 'Tenor Sans', Georgia, 'Times New Roman', serif;
+  --font-lato: 'Lato', 'Helvetica Neue', Arial, sans-serif;
+  --font-circular-std: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
   /* Minsah Beauty Color Palette */
   --color-primary: #64320D;        /* Dark Brown */
   --color-secondary: #8E6545;      /* Medium Brown */

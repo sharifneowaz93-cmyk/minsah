@@ -16,12 +16,11 @@ function createMinioClient(): Client {
   const useSSL = process.env.MINIO_USE_SSL === 'true';
 
   if (!accessKey || !secretKey) {
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) {
+    if (process.env.NODE_ENV === 'production') {
       logger.error('MinIO credentials not set in production. Storage operations will fail.');
-      throw new Error('MINIO_ACCESS_KEY and MINIO_SECRET_KEY must be set in production');
+    } else {
+      logger.warn('MinIO credentials not set. Using development defaults.');
     }
-    logger.warn('MinIO credentials not set. Using development defaults.');
   }
 
   return new Client({
