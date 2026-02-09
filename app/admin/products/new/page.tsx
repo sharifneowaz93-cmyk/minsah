@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAdminAuth, PERMISSIONS } from '@/contexts/AdminAuthContext';
 import { useCategories } from '@/contexts/CategoriesContext';
+import { useProducts } from '@/contexts/ProductsContext';
 import {
   ArrowLeft,
   Save,
@@ -140,6 +141,7 @@ export default function NewProductPage() {
   const router = useRouter();
   const { hasPermission } = useAdminAuth();
   const { getActiveCategories } = useCategories();
+  const { addProduct } = useProducts();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Transform categories from context to the format needed by the form
@@ -506,24 +508,93 @@ export default function NewProductPage() {
       formDataToSend.append('preOrderOption', formData.preOrderOption.toString());
       formDataToSend.append('relatedProducts', formData.relatedProducts);
 
-      // In production, you would send this to your API:
-      // const response = await fetch('/api/products', {
-      //   method: 'POST',
-      //   body: formDataToSend,
-      // });
+      // Get the main image (or first image)
+      const mainImage = formData.images.find(img => img.isMain) || formData.images[0];
+      const mainImageUrl = mainImage ? mainImage.preview : '/products/placeholder.jpg';
+      const imageUrls = formData.images.map(img => img.preview);
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Calculate price from first variant or set default
+      const basePrice = formData.variants.length > 0
+        ? parseFloat(formData.variants[0].price) || 0
+        : 0;
 
-      console.log('Product data to be sent:', {
-        ...formData,
-        images: formData.images.map(img => ({
-          fileName: img.file.name,
-          size: img.file.size,
-          type: img.file.type,
-          isMain: img.isMain,
-        })),
-      });
+      // Calculate original price if there's a discount
+      const originalPrice = formData.discountPercentage
+        ? basePrice / (1 - parseFloat(formData.discountPercentage) / 100)
+        : formData.salePrice
+        ? parseFloat(formData.salePrice)
+        : undefined;
+
+      // Calculate total stock from variants
+      const totalStock = formData.variants.length > 0
+        ? formData.variants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
+        : 0;
+
+      // Create the product object matching ProductsContext interface
+      const newProduct = {
+        id: Date.now().toString(),
+        name: formData.name,
+        category: formData.category,
+        subcategory: formData.subcategory || undefined,
+        item: formData.item || undefined,
+        brand: formData.brand,
+        originCountry: formData.originCountry,
+        price: basePrice,
+        originalPrice,
+        stock: totalStock,
+        status: formData.status,
+        image: mainImageUrl,
+        images: imageUrls.length > 0 ? imageUrls : undefined,
+        rating: 0,
+        reviews: 0,
+        createdAt: new Date().toISOString(),
+        featured: formData.featured,
+        description: formData.description || undefined,
+
+        // Specifications
+        weight: formData.weight || undefined,
+        ingredients: formData.ingredients || undefined,
+        skinType: formData.skinType.length > 0 ? formData.skinType : undefined,
+        expiryDate: formData.expiryDate || undefined,
+        shelfLife: formData.shelfLife || undefined,
+
+        // Variants
+        variants: formData.variants.length > 0 ? formData.variants : undefined,
+
+        // SEO
+        metaTitle: formData.metaTitle || undefined,
+        metaDescription: formData.metaDescription || undefined,
+        urlSlug: formData.urlSlug || undefined,
+        tags: formData.tags || undefined,
+
+        // Shipping
+        shippingWeight: formData.shippingWeight || undefined,
+        dimensions: (formData.dimensions.length || formData.dimensions.width || formData.dimensions.height)
+          ? formData.dimensions
+          : undefined,
+        isFragile: formData.isFragile || undefined,
+        freeShippingEligible: formData.freeShippingEligible || undefined,
+
+        // Discount
+        discountPercentage: formData.discountPercentage || undefined,
+        salePrice: formData.salePrice || undefined,
+        offerStartDate: formData.offerStartDate || undefined,
+        offerEndDate: formData.offerEndDate || undefined,
+        flashSaleEligible: formData.flashSaleEligible || undefined,
+
+        // Stock Management
+        lowStockThreshold: formData.lowStockThreshold || undefined,
+        barcode: formData.barcode || undefined,
+
+        // Additional Options
+        returnEligible: formData.returnEligible || undefined,
+        codAvailable: formData.codAvailable || undefined,
+        preOrderOption: formData.preOrderOption || undefined,
+        relatedProducts: formData.relatedProducts || undefined,
+      };
+
+      // Save the product using context
+      addProduct(newProduct);
 
       alert('Product created successfully!');
       router.push('/admin/products');
