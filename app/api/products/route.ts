@@ -113,7 +113,8 @@ export async function GET(request: NextRequest) {
     // Admin panel can pass activeOnly=false to see all products
     const activeOnly = searchParams.get('activeOnly') !== 'false';
 
-    const where: Parameters<typeof prisma.product.findMany>[0]['where'] = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {};
 
     if (activeOnly) {
       where.isActive = true;
@@ -136,8 +137,8 @@ export async function GET(request: NextRequest) {
 
     if (minPrice || maxPrice) {
       where.price = {};
-      if (minPrice) (where.price as { gte?: number; lte?: number }).gte = parseFloat(minPrice);
-      if (maxPrice) (where.price as { gte?: number; lte?: number }).lte = parseFloat(maxPrice);
+      if (minPrice) where.price.gte = parseFloat(minPrice);
+      if (maxPrice) where.price.lte = parseFloat(maxPrice);
     }
 
     if (inStock === 'true') {
@@ -153,7 +154,8 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const orderByMap: Record<string, Parameters<typeof prisma.product.findMany>[0]['orderBy']> = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderByMap: Record<string, any> = {
       name: { name: order },
       price: { price: order },
       createdAt: { createdAt: order },
