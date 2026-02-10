@@ -97,7 +97,11 @@ export function middleware(request: NextRequest) {
   // Handle API routes
   if (pathname.startsWith('/api')) {
     const response = NextResponse.next();
-    response.headers.set('Content-Type', 'application/json; charset=utf-8');
+    // Do NOT set a fixed Content-Type here.
+    // - Response Content-Type is set by each route handler (e.g. NextResponse.json()).
+    // - Upload routes receive multipart/form-data requests; forcing application/json
+    //   onto the NextResponse.next() object overwrites the forwarded request Content-Type
+    //   header in Next.js App Router middleware, causing request.formData() to throw.
     return handleCors(request, createSecureResponse(response));
   }
 
