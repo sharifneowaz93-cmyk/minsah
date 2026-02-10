@@ -74,54 +74,15 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  // Cart state
-  const [items, setItems] = useState<CartItem[]>([
-    {
-      id: '1',
-      name: 'Mac Studio Foundation',
-      price: 47.00,
-      quantity: 1,
-      image: '/images/products/foundation.jpg',
-      sku: '#421C00'
-    },
-    {
-      id: '2',
-      name: 'Blush Stick - Makeup by mario',
-      price: 32.00,
-      quantity: 1,
-      image: '/images/products/blush.jpg',
-      sku: '#421C00'
-    },
-    {
-      id: '3',
-      name: 'Eyeshadow Palette by Anastasia',
-      price: 33.00,
-      quantity: 1,
-      image: '/images/products/eyeshadow.jpg',
-      sku: '#421C00'
-    }
-  ]);
+  // Cart state — starts empty; restored from localStorage in useEffect
+  const [items, setItems] = useState<CartItem[]>([]);
 
   const [promoCode, setPromoCode] = useState('');
   const [discount, setDiscount] = useState(0);
 
-  // Address state
-  const [addresses, setAddresses] = useState<Address[]>([
-    {
-      id: '1',
-      fullName: 'John Doe',
-      phoneNumber: '+880 1234 567890',
-      landmark: 'Near City Center',
-      provinceRegion: 'Dhaka',
-      city: 'Dhaka',
-      zone: 'Gulshan',
-      address: 'House#123, street abc, NYC',
-      type: 'home',
-      isDefault: true,
-      coordinates: { lat: 23.7937, lng: 90.4066 }
-    }
-  ]);
-  const [selectedAddress, setSelectedAddress] = useState<Address | null>(addresses[0] || null);
+  // Address state — starts empty; user adds their own addresses
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
 
   // Payment state
   const paymentMethods: PaymentMethod[] = [
@@ -216,23 +177,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Load cart from localStorage on mount
+  // Load cart and addresses from localStorage on mount
   useEffect(() => {
-    const savedCart = localStorage.getItem('minsah_cart');
-    if (savedCart) {
-      try {
-        const parsed = JSON.parse(savedCart);
-        setItems(parsed);
-      } catch (error) {
-        console.error('Error loading cart:', error);
+    try {
+      const savedCart = localStorage.getItem('minsah_cart');
+      if (savedCart) setItems(JSON.parse(savedCart));
+    } catch { /* ignore */ }
+
+    try {
+      const savedAddresses = localStorage.getItem('minsah_addresses');
+      if (savedAddresses) {
+        const parsed: Address[] = JSON.parse(savedAddresses);
+        setAddresses(parsed);
+        const def = parsed.find(a => a.isDefault) || parsed[0] || null;
+        setSelectedAddress(def);
       }
-    }
+    } catch { /* ignore */ }
   }, []);
 
   // Save cart to localStorage on change
   useEffect(() => {
     localStorage.setItem('minsah_cart', JSON.stringify(items));
   }, [items]);
+
+  // Save addresses to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('minsah_addresses', JSON.stringify(addresses));
+  }, [addresses]);
 
   return (
     <CartContext.Provider value={{

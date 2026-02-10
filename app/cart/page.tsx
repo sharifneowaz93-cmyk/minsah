@@ -79,11 +79,11 @@ export default function CartPage() {
               >
                 {/* Product Image */}
                 <div className="w-24 h-24 bg-gradient-to-br from-minsah-accent to-minsah-light rounded-xl flex items-center justify-center flex-shrink-0 relative overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center text-4xl">
-                    {item.name.includes('Foundation') ? '💄' :
-                     item.name.includes('Blush') ? '💅' :
-                     item.name.includes('Eyeshadow') ? '🎨' : '✨'}
-                  </div>
+                  {item.image && (item.image.startsWith('/') || item.image.startsWith('http') || item.image.startsWith('data:')) ? (
+                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-4xl">{item.image || '✨'}</div>
+                  )}
                 </div>
 
                 {/* Product Details */}

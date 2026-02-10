@@ -215,10 +215,12 @@ export default function CheckoutPage() {
               <div className="mt-4 space-y-3">
                 {items.map((item) => (
                   <div key={item.id} className="flex gap-3 p-3 bg-minsah-accent rounded-xl">
-                    <div className="w-16 h-16 bg-gradient-to-br from-white to-minsah-light rounded-lg flex items-center justify-center flex-shrink-0 text-2xl">
-                      {item.name.includes('Foundation') ? '💄' :
-                       item.name.includes('Blush') ? '💅' :
-                       item.name.includes('Eyeshadow') ? '🎨' : '✨'}
+                    <div className="w-16 h-16 bg-gradient-to-br from-white to-minsah-light rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {item.image && (item.image.startsWith('/') || item.image.startsWith('http') || item.image.startsWith('data:')) ? (
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-2xl">{item.image || '✨'}</span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-semibold text-minsah-dark line-clamp-1 mb-1">
