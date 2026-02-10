@@ -391,7 +391,7 @@ export default function ProductsPage() {
                         <button
                           onClick={() => {
                             if (confirm(`Are you sure you want to delete ${product.name}?`)) {
-                              setProducts(products.filter(p => p.id !== product.id));
+                              deleteProduct(product.id);
                             }
                           }}
                           className="text-red-600 hover:text-red-800"
