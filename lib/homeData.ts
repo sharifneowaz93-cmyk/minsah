@@ -195,53 +195,8 @@ export const defaultComboSlides: ComboSlide[] = [
   },
 ];
 
-// Default Products (sample data)
-export const defaultProducts: HomeSectionProduct[] = [
-  {
-    id: '1',
-    name: 'Blush Stick Makeup by Mario',
-    brand: 'Makeup by Mario',
-    price: 32,
-    image: 'BLUSH',
-    sku: '#421C00',
-    stock: 0,
-    category: 'makeup',
-    isVisible: true,
-    isFeatured: false,
-    isNewArrival: true,
-    isFlashSale: false,
-    isFavourite: false,
-    isRecommended: false,
-    isForYou: true,
-    order: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'Eye Liner Saga',
-    brand: 'Saga Beauty',
-    price: 15,
-    image: 'EYELINER',
-    sku: '#421C00',
-    stock: 0,
-    category: 'makeup',
-    isVisible: true,
-    isFeatured: false,
-    isNewArrival: true,
-    isFlashSale: false,
-    isFavourite: false,
-    isRecommended: true,
-    isForYou: true,
-    order: 2,
-    createdAt: new Date().toISOString(),
-  },
-  // Add more products as needed
-];
+// Default Products - populated from database
+export const defaultProducts: HomeSectionProduct[] = [];
 
-// Default Combos
-export const defaultCombos: HomeSectionCombo[] = [
-  { id: 'c1', name: 'Makeup Combo', price: 1200, priceRange: 'Tk 1001-1500', image: 'MAKEUP', isVisible: true, order: 1, category: 'makeup' },
-  { id: 'c2', name: 'Skincare Combo', price: 1350, priceRange: 'Tk 1001-1500', image: 'SKIN', isVisible: true, order: 2, category: 'skincare' },
-  { id: 'c3', name: 'Haircare Combo', price: 1400, priceRange: 'Tk 1001-1500', image: 'HAIR', isVisible: true, order: 3, category: 'haircare' },
-  { id: 'c4', name: 'Body Care Combo', price: 1450, priceRange: 'Tk 1001-1500', image: 'BODY', isVisible: true, order: 4, category: 'bodycare' },
-];
+// Default Combos - populated from database
+export const defaultCombos: HomeSectionCombo[] = [];

@@ -23,52 +23,8 @@ interface InstantSearchProps {
   className?: string;
 }
 
-// Mock product data - replace with actual API call
-const mockProducts: Product[] = [
-  {
-    id: '1',
-    name: 'Luxury Lipstick Collection',
-    price: 12.99,
-    originalPrice: 19.99,
-    image: '/api/placeholder/80/80',
-    category: 'Make Up',
-    description: 'Premium matte lipstick set'
-  },
-  {
-    id: '2',
-    name: 'Anti-Aging Face Serum',
-    price: 24.99,
-    image: '/api/placeholder/80/80',
-    category: 'Skin care',
-    description: 'Advanced collagen-boosting formula'
-  },
-  {
-    id: '3',
-    name: 'Floral Perfume Deluxe',
-    price: 35.99,
-    originalPrice: 49.99,
-    image: '/api/placeholder/80/80',
-    category: 'Perfume',
-    description: 'Long-lasting fragrance'
-  },
-  {
-    id: '4',
-    name: 'Professional Nail Kit',
-    price: 18.99,
-    image: '/api/placeholder/80/80',
-    category: 'Nails',
-    description: 'Complete manicure set'
-  },
-  {
-    id: '5',
-    name: 'Hair Growth Oil',
-    price: 15.99,
-    originalPrice: 22.99,
-    image: '/api/placeholder/80/80',
-    category: 'Hair care',
-    description: 'Natural hair treatment'
-  }
-];
+// Products loaded from API/database
+const mockProducts: Product[] = [];
 
 export default function InstantSearch({
   placeholder = 'Search for products...',
