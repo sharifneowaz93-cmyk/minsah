@@ -337,15 +337,17 @@ export default function ProductsPage() {
                   <td className="px-6 py-4">
                     <div className="text-sm">
                       <span className="font-medium text-gray-900">{formatPrice(convertUSDtoBDT(product.price))}</span>
-                      {product.originalPrice > product.price && (
+                      {product.originalPrice != null && product.originalPrice > product.price && (
                         <span className="ml-2 text-xs text-gray-500 line-through">
                           {formatPrice(convertUSDtoBDT(product.originalPrice))}
                         </span>
                       )}
                     </div>
+                    {product.originalPrice != null && product.originalPrice > product.price && (
                     <div className="text-xs text-green-600">
                       {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
                     </div>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <div className={clsx('text-sm font-medium', getStockColor(product.stock))}>
