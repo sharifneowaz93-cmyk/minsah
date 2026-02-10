@@ -35,8 +35,28 @@ function createMinioClient(): Client {
 
 export const minio = globalForMinio.minio ?? createMinioClient();
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForMinio.minio = minio;
+// Always cache the singleton to avoid creating a new client on every hot-reload
+// or module re-evaluation (important in both development and production).
+globalForMinio.minio = minio;
+
+// Track whether bucket initialisation has run in this process.
+const globalWithInit = globalThis as unknown as {
+  minioInitialized: boolean | undefined;
+};
+
+/**
+ * Ensure the bucket exists and has the correct policy.
+ * Safe to call multiple times – runs only once per process.
+ */
+export async function ensureBucketInitialized(): Promise<void> {
+  if (globalWithInit.minioInitialized) return;
+  globalWithInit.minioInitialized = true; // mark before await to prevent races
+  try {
+    await initializeBucket();
+  } catch (error) {
+    globalWithInit.minioInitialized = false; // allow retry on next request
+    throw error;
+  }
 }
 
 // Default bucket name

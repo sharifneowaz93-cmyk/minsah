@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { uploadFile, validateImageUpload } from '@/lib/storage/minio';
+import { uploadFile, validateImageUpload, ensureBucketInitialized } from '@/lib/storage/minio';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureBucketInitialized();
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const folder = (formData.get('folder') as string) || 'uploads';
@@ -30,7 +31,8 @@ export async function POST(request: NextRequest) {
       url: result.url,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('Upload error:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Upload failed', detail: message }, { status: 500 });
   }
 }

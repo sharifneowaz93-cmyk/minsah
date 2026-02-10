@@ -227,9 +227,9 @@ export default function NewProductPage() {
         return;
       }
 
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert(`File ${file.name} is too large. Maximum size is 5MB`);
+      // Validate file size (max 10MB — matches server-side limit)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`File ${file.name} is too large. Maximum size is 10MB`);
         return;
       }
 
@@ -461,7 +461,8 @@ export default function NewProductPage() {
 
         if (!uploadRes.ok) {
           const err = await uploadRes.json();
-          throw new Error(`Image upload failed: ${err.error || 'Unknown error'}`);
+          const detail = err.detail ? ` (${err.detail})` : '';
+          throw new Error(`Image upload failed: ${err.error || 'Unknown error'}${detail}`);
         }
 
         const uploadData = await uploadRes.json();
@@ -806,7 +807,7 @@ export default function NewProductPage() {
             <h2 className="text-lg font-semibold text-gray-900">Product Images</h2>
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Upload product images. Maximum file size: 5MB per image. First image will be the main display.
+            Upload product images. Maximum file size: 10MB per image. First image will be the main display.
           </p>
 
           <div className="space-y-4">
@@ -829,7 +830,7 @@ export default function NewProductPage() {
                 Upload Images
               </button>
               <p className="mt-2 text-xs text-gray-500">
-                Supported formats: JPEG, PNG, WebP (Max 5MB each)
+                Supported formats: JPEG, PNG, WebP (Max 10MB each)
               </p>
               {errors.images && (
                 <div className="mt-2 flex items-center text-sm text-red-600">

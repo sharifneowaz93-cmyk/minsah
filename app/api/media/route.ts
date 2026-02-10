@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Media upload error:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: 'Upload failed', detail: message }, { status: 500 });
   }
 }
 
