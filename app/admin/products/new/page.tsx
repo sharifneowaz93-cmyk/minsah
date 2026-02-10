@@ -4,6 +4,7 @@ import { useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAdminAuth, PERMISSIONS } from '@/contexts/AdminAuthContext';
+import { useProducts } from '@/contexts/ProductsContext';
 import { useCategories } from '@/contexts/CategoriesContext';
 import {
   ArrowLeft,
@@ -139,6 +140,7 @@ const skinTypes = ['Oily', 'Dry', 'Combination', 'Sensitive', 'Normal', 'All Ski
 export default function NewProductPage() {
   const router = useRouter();
   const { hasPermission } = useAdminAuth();
+  const { refreshProducts } = useProducts();
   const { getActiveCategories } = useCategories();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -539,8 +541,10 @@ export default function NewProductPage() {
         throw new Error(err.error || 'Failed to create product');
       }
 
+      await refreshProducts();
       alert('Product created successfully!');
       router.push('/admin/products');
+      
     } catch (error) {
       console.error('Error creating product:', error);
       alert(error instanceof Error ? error.message : 'Failed to create product. Please try again.');
