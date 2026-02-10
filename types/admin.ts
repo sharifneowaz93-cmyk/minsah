@@ -591,85 +591,8 @@ export function generateMockAdminStats(): AdminDashboardStats {
 }
 
 export function generateMockProducts(): AdminProduct[] {
-  return Array.from({ length: 20 }, (_, i) => ({
-    id: `P-${String(i + 1).padStart(3, '0')}`,
-    name: [
-      'Luxury Face Serum',
-      'Hydrating Face Cream',
-      'Anti-Aging Eye Cream',
-      'Rose Face Oil',
-      'Vitamin C Serum',
-      'Collagen Mask',
-      'Detox Clay Mask',
-      'Rosehip Oil',
-      'Green Tea Cleanser',
-      'Retinol Night Cream',
-    ][i % 10],
-    description: 'Premium beauty product with natural ingredients and proven results.',
-    sku: `SKU-${String(i + 1).padStart(4, '0')}`,
-    price: Math.floor(Math.random() * 100) + 20,
-    comparePrice: Math.floor(Math.random() * 150) + 80,
-    cost: Math.floor(Math.random() * 30) + 10,
-    weight: Math.random() * 200 + 50,
-    dimensions: {
-      length: Math.random() * 10 + 5,
-      width: Math.random() * 10 + 5,
-      height: Math.random() * 15 + 10,
-    },
-    category: {
-      id: `CAT-${Math.floor(i / 2) + 1}`,
-      name: ['Skincare', 'Makeup', 'Hair Care', 'Body Care'][Math.floor(i / 5)],
-      subcategory: ['Serums', 'Moisturizers', 'Cleansers'][i % 3],
-    },
-    brand: ['Minsah Beauty', 'Glow Essentials', 'Pure Radiance'][i % 3],
-    tags: ['natural', 'organic', 'vegan', 'cruelty-free'].slice(0, Math.floor(Math.random() * 3) + 1),
-    variants: Array.from({ length: Math.floor(Math.random() * 3) + 1 }, (_, j) => ({
-      id: `V-${i}-${j}`,
-      name: `Size ${j + 1}`,
-      options: {
-        size: ['30ml', '50ml', '100ml'][j % 3],
-        color: ['Natural', 'Pink', 'White'][j % 3],
-      },
-      price: Math.floor(Math.random() * 100) + 20,
-      sku: `SKU-${String(i + 1).padStart(4, '0')}-${j + 1}`,
-      inventory: {
-        quantity: Math.floor(Math.random() * 100),
-        trackQuantity: true,
-      },
-    })),
-    images: Array.from({ length: Math.floor(Math.random() * 3) + 1 }, (_, j) => ({
-      id: `IMG-${i}-${j}`,
-      url: `https://example.com/product-${i}-${j}.jpg`,
-      alt: `Product image ${j + 1}`,
-      position: j,
-      isMain: j === 0,
-    })),
-    seo: {
-      title: `Beauty Product ${i + 1}`,
-      description: 'High-quality beauty product for radiant skin',
-      keywords: ['beauty', 'skincare', 'cosmetics'],
-      slug: `beauty-product-${i + 1}`,
-    },
-    inventory: {
-      quantity: Math.floor(Math.random() * 100),
-      lowStockThreshold: 10,
-      trackQuantity: true,
-      allowBackorder: false,
-      location: 'Warehouse A',
-    },
-    shipping: {
-      requiresShipping: true,
-      weightUnit: 'g',
-      originCountry: 'US',
-    },
-    status: ['active', 'draft', 'archived'][i % 3] as any,
-    createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-    sales: Math.floor(Math.random() * 500),
-    views: Math.floor(Math.random() * 5000),
-    rating: (Math.random() * 2 + 3).toFixed(1) as any,
-    reviews: Math.floor(Math.random() * 100),
-  }));
+  // Products loaded from database
+  return [];
 }
 
 export function generateMockCustomers(): AdminCustomer[] {

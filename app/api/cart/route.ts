@@ -120,81 +120,14 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date().toISOString()
     };
 
-    // Mock product data (in production, fetch from database)
-    const mockProducts = {
-      '1': {
-        id: '1',
-        name: 'Premium Foundation',
-        slug: 'premium-foundation',
-        price: 2500,
-        originalPrice: 3000,
-        image: '/images/products/foundation-1.jpg',
-        inStock: true
-      },
-      '2': {
-        id: '2',
-        name: 'Hydrating Face Serum',
-        slug: 'hydrating-face-serum',
-        price: 1800,
-        originalPrice: 2200,
-        image: '/images/products/serum-1.jpg',
-        inStock: true
-      }
-    };
-
-    const product = mockProducts[productId as keyof typeof mockProducts];
-    if (!product) {
-      return NextResponse.json(
-        { error: 'Product not found' },
-        { status: 404 }
-      );
-    }
-
-    // Check if item already exists in cart
-    const existingItemIndex = cart.items.findIndex(
-      item => item.productId === productId &&
-      JSON.stringify(item.variant) === JSON.stringify(variant)
+    // TODO: Fetch product from database
+    // const product = await db.product.findUnique({ where: { id: productId } });
+    return NextResponse.json(
+      { error: 'Product not found' },
+      { status: 404 }
     );
 
-    if (existingItemIndex > -1) {
-      // Update quantity of existing item
-      cart.items[existingItemIndex].quantity += quantity;
-    } else {
-      // Add new item to cart
-      cart.items.push({
-        id: `item_${Date.now()}`,
-        productId,
-        name: product.name,
-        slug: product.slug,
-        price: product.price,
-        originalPrice: product.originalPrice,
-        image: product.image,
-        quantity,
-        variant,
-        inStock: product.inStock
-      });
-    }
-
-    // Recalculate totals
-    cart.subtotal = cart.items.reduce((total, item) => total + (item.price * item.quantity), 0);
-    cart.tax = Math.round(cart.subtotal * 0.05); // 5% tax
-    cart.shipping = cart.subtotal >= 5000 ? 0 : 100; // Free shipping over 5000 BDT
-    cart.total = cart.subtotal + cart.tax + cart.shipping;
-    cart.updatedAt = new Date().toISOString();
-
-    // Save cart
-    mockCarts.set(cartId, cart);
-
-    // Set cart ID cookie
-    const response = NextResponse.json({ cart });
-    response.cookies.set('cart_id', cartId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24 * 30 // 30 days
-    });
-
-    return response;
+    // TODO: Add item to cart using database product data
 
   } catch (error) {
     console.error('Error adding to cart:', error);

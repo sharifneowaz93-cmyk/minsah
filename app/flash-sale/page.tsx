@@ -8,14 +8,8 @@ import { formatPrice, convertUSDtoBDT } from '@/utils/currency';
 
 const categories = ['All', 'Makeup', 'Skincare', 'Hair Care', 'Fragrance'];
 
-const products = [
-  { id: '1', name: 'Lipstick', brand: 'Dior', price: 38, originalPrice: 60, discount: 18, image: '💄', stock: 0 },
-  { id: '2', name: 'Eye Palette', brand: 'Anastasia', price: 33, originalPrice: 65, discount: 25, image: '🎨', stock: 0 },
-  { id: '3', name: 'Color Corrector', brand: 'Huda Beauty', price: 28, originalPrice: 40, discount: 5, image: '🌈', stock: 0 },
-  { id: '4', name: 'Bronze', brand: 'Bobbi Brown', price: 10, originalPrice: 21, discount: 5, image: '🖌️', stock: 0 },
-  { id: '5', name: 'Hair Mask', brand: 'Gisou', price: 45, originalPrice: 70, discount: 18, image: '🧴', stock: 0 },
-  { id: '6', name: 'Fragrance', brand: 'Giorgio Armani', price: 85, originalPrice: 120, discount: 5, image: '🌺', stock: 0 },
-];
+// Products loaded from database
+const products: { id: string; name: string; brand: string; price: number; originalPrice: number; discount: number; image: string; stock: number }[] = [];
 
 export default function FlashSalePage() {
   const { items } = useCart();
