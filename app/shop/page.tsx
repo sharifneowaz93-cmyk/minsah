@@ -2,7 +2,6 @@ import { Suspense } from 'react';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { ChevronRight, Loader2 } from 'lucide-react';
-import { mockProducts } from '@/lib/productData';
 import { parseSearchParams, generatePageTitle, generateMetaDescription } from '@/lib/shopUtils';
 import ShopGrid from '@/app/components/shop/ShopGrid';
 
@@ -15,7 +14,7 @@ export async function generateMetadata({ searchParams }: { searchParams: { [key:
 
   const filters = parseSearchParams(params);
   const title = generatePageTitle(filters);
-  const description = generateMetaDescription(filters, mockProducts.length);
+  const description = generateMetaDescription(filters, 0);
 
   return {
     title,
