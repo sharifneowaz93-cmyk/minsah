@@ -20,6 +20,7 @@ export {
   minio,
   BUCKET_NAME,
   initializeBucket,
+  ensureBucketInitialized,
   uploadFile,
   uploadProductImage,
   uploadAvatar,
