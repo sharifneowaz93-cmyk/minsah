@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAdminAuth, PERMISSIONS } from '@/contexts/AdminAuthContext';
 import { useCategories } from '@/contexts/CategoriesContext';
-import { useProducts } from '@/contexts/ProductsContext';
 import {
   ArrowLeft,
   Save,
@@ -141,7 +140,6 @@ export default function NewProductPage() {
   const router = useRouter();
   const { hasPermission } = useAdminAuth();
   const { getActiveCategories } = useCategories();
-  const { addProduct } = useProducts();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Transform categories from context to the format needed by the form
@@ -449,167 +447,102 @@ export default function NewProductPage() {
     setIsSubmitting(true);
 
     try {
-      // Create FormData for file upload
-      const formDataToSend = new FormData();
+      // Step 1: Upload images to MinIO via /api/upload
+      const uploadedImageUrls: string[] = [];
+      for (const image of formData.images) {
+        const uploadForm = new FormData();
+        uploadForm.append('file', image.file);
+        uploadForm.append('folder', 'products/new');
 
-      // Add basic fields
-      formDataToSend.append('name', formData.name);
-      formDataToSend.append('category', formData.category);
-      formDataToSend.append('brand', formData.brand);
-      formDataToSend.append('originCountry', formData.originCountry);
-      formDataToSend.append('status', formData.status);
-      formDataToSend.append('featured', formData.featured.toString());
-      formDataToSend.append('description', formData.description);
-
-      // Add specifications
-      formDataToSend.append('weight', formData.weight);
-      formDataToSend.append('ingredients', formData.ingredients);
-      formDataToSend.append('skinType', JSON.stringify(formData.skinType));
-      formDataToSend.append('expiryDate', formData.expiryDate);
-      formDataToSend.append('shelfLife', formData.shelfLife);
-
-      // Add images
-      formData.images.forEach((image, index) => {
-        formDataToSend.append('images', image.file);
-        formDataToSend.append(`image_${index}_isMain`, image.isMain.toString());
-      });
-
-      // Add variants
-      formDataToSend.append('variants', JSON.stringify(formData.variants));
-
-      // Add SEO fields
-      formDataToSend.append('metaTitle', formData.metaTitle);
-      formDataToSend.append('metaDescription', formData.metaDescription);
-      formDataToSend.append('urlSlug', formData.urlSlug);
-      formDataToSend.append('tags', formData.tags);
-
-      // Add shipping fields
-      formDataToSend.append('shippingWeight', formData.shippingWeight);
-      formDataToSend.append('dimensions', JSON.stringify(formData.dimensions));
-      formDataToSend.append('isFragile', formData.isFragile.toString());
-      formDataToSend.append('freeShippingEligible', formData.freeShippingEligible.toString());
-
-      // Add discount fields
-      formDataToSend.append('discountPercentage', formData.discountPercentage);
-      formDataToSend.append('salePrice', formData.salePrice);
-      formDataToSend.append('offerStartDate', formData.offerStartDate);
-      formDataToSend.append('offerEndDate', formData.offerEndDate);
-      formDataToSend.append('flashSaleEligible', formData.flashSaleEligible.toString());
-
-      // Add stock management fields
-      formDataToSend.append('lowStockThreshold', formData.lowStockThreshold);
-      formDataToSend.append('barcode', formData.barcode);
-
-      // Add additional options
-      formDataToSend.append('returnEligible', formData.returnEligible.toString());
-      formDataToSend.append('codAvailable', formData.codAvailable.toString());
-      formDataToSend.append('preOrderOption', formData.preOrderOption.toString());
-      formDataToSend.append('relatedProducts', formData.relatedProducts);
-
-      // Convert uploaded files to base64 data URLs so they persist after navigation
-      const toBase64 = (file: File): Promise<string> =>
-        new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: uploadForm,
         });
 
-      const base64Images = await Promise.all(formData.images.map(img => toBase64(img.file)));
-      const mainIndex = formData.images.findIndex(img => img.isMain);
-      const mainImageUrl = base64Images.length > 0
-        ? base64Images[mainIndex !== -1 ? mainIndex : 0]
-        : '/products/placeholder.jpg';
-      const imageUrls = base64Images;
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json();
+          throw new Error(`Image upload failed: ${err.error || 'Unknown error'}`);
+        }
 
-      // Calculate price from first variant or set default
+        const uploadData = await uploadRes.json();
+        uploadedImageUrls.push(uploadData.url);
+      }
+
+      // Reorder so the main image is first
+      const mainIndex = formData.images.findIndex(img => img.isMain);
+      if (mainIndex > 0) {
+        const [mainUrl] = uploadedImageUrls.splice(mainIndex, 1);
+        uploadedImageUrls.unshift(mainUrl);
+      }
+
+      // Step 2: Build original price
       const basePrice = formData.variants.length > 0
         ? parseFloat(formData.variants[0].price) || 0
         : 0;
 
-      // Calculate original price if there's a discount
       const originalPrice = formData.discountPercentage
         ? basePrice / (1 - parseFloat(formData.discountPercentage) / 100)
         : formData.salePrice
         ? parseFloat(formData.salePrice)
         : undefined;
 
-      // Calculate total stock from variants
-      const totalStock = formData.variants.length > 0
-        ? formData.variants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
-        : 0;
-
-      // Create the product object matching ProductsContext interface
-      const newProduct = {
-        id: Date.now().toString(),
+      // Step 3: POST product data to /api/products
+      const productPayload = {
         name: formData.name,
         category: formData.category,
         subcategory: formData.subcategory || undefined,
-        item: formData.item || undefined,
         brand: formData.brand,
         originCountry: formData.originCountry,
-        price: basePrice,
-        originalPrice,
-        stock: totalStock,
         status: formData.status,
-        image: mainImageUrl,
-        images: imageUrls.length > 0 ? imageUrls : undefined,
-        rating: 0,
-        reviews: 0,
-        createdAt: new Date().toISOString(),
         featured: formData.featured,
-        description: formData.description || undefined,
-
-        // Specifications
+        description: formData.description,
         weight: formData.weight || undefined,
         ingredients: formData.ingredients || undefined,
         skinType: formData.skinType.length > 0 ? formData.skinType : undefined,
         expiryDate: formData.expiryDate || undefined,
         shelfLife: formData.shelfLife || undefined,
-
-        // Variants
-        variants: formData.variants.length > 0 ? formData.variants : undefined,
-
-        // SEO
+        images: uploadedImageUrls,
+        variants: formData.variants,
         metaTitle: formData.metaTitle || undefined,
         metaDescription: formData.metaDescription || undefined,
         urlSlug: formData.urlSlug || undefined,
         tags: formData.tags || undefined,
-
-        // Shipping
         shippingWeight: formData.shippingWeight || undefined,
         dimensions: (formData.dimensions.length || formData.dimensions.width || formData.dimensions.height)
           ? formData.dimensions
           : undefined,
         isFragile: formData.isFragile || undefined,
         freeShippingEligible: formData.freeShippingEligible || undefined,
-
-        // Discount
         discountPercentage: formData.discountPercentage || undefined,
         salePrice: formData.salePrice || undefined,
+        originalPrice,
         offerStartDate: formData.offerStartDate || undefined,
         offerEndDate: formData.offerEndDate || undefined,
         flashSaleEligible: formData.flashSaleEligible || undefined,
-
-        // Stock Management
         lowStockThreshold: formData.lowStockThreshold || undefined,
         barcode: formData.barcode || undefined,
-
-        // Additional Options
         returnEligible: formData.returnEligible || undefined,
         codAvailable: formData.codAvailable || undefined,
         preOrderOption: formData.preOrderOption || undefined,
         relatedProducts: formData.relatedProducts || undefined,
       };
 
-      // Save the product using context
-      addProduct(newProduct);
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(productPayload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to create product');
+      }
 
       alert('Product created successfully!');
       router.push('/admin/products');
     } catch (error) {
       console.error('Error creating product:', error);
-      alert('Failed to create product. Please try again.');
+      alert(error instanceof Error ? error.message : 'Failed to create product. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

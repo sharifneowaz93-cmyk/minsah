@@ -1,166 +1,198 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import prisma from '@/lib/prisma';
 
-// Mock product data - replace with database calls
-const mockProducts = [
-  {
-    id: '1',
-    name: 'Premium Foundation',
-    slug: 'premium-foundation',
-    description: 'Long-lasting foundation with SPF 30 protection',
-    price: 2500,
-    originalPrice: 3000,
-    images: ['/images/products/foundation-1.jpg'],
-    category: 'makeup',
-    subcategory: 'face',
-    brand: 'Minsah Beauty',
-    rating: 4.5,
-    reviews: 128,
-    inStock: true,
-    tags: ['foundation', 'spf', 'long-lasting'],
-    sku: 'MS-FDN-001',
-    weight: 30,
-    dimensions: { length: 5, width: 5, height: 3 },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: '2',
-    name: 'Hydrating Face Serum',
-    slug: 'hydrating-face-serum',
-    description: '24-hour hydration with vitamin C and hyaluronic acid',
-    price: 1800,
-    originalPrice: null,
-    images: ['/images/products/serum-1.jpg'],
-    category: 'skincare',
-    subcategory: 'serums',
-    brand: 'Minsah Beauty',
-    rating: 4.8,
-    reviews: 256,
-    inStock: true,
-    tags: ['serum', 'hydration', 'vitamin-c'],
-    sku: 'MS-SRM-002',
-    weight: 30,
-    dimensions: { length: 4, width: 4, height: 8 },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-];
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+function toSlug(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function formatProduct(product: {
+  id: string;
+  sku: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  shortDescription: string | null;
+  price: { toNumber: () => number };
+  compareAtPrice: { toNumber: () => number } | null;
+  quantity: number;
+  isActive: boolean;
+  isFeatured: boolean;
+  isNew: boolean;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  metaKeywords: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  images: Array<{ url: string; isDefault: boolean; sortOrder: number }>;
+  category: { name: string; slug: string } | null;
+  brand: { name: string; slug: string } | null;
+  variants: Array<{
+    id: string;
+    sku: string;
+    name: string;
+    price: { toNumber: () => number } | null;
+    quantity: number;
+    attributes: unknown;
+  }>;
+  reviews: Array<{ rating: number }>;
+}) {
+  const sortedImages = [...product.images].sort((a, b) => a.sortOrder - b.sortOrder);
+  const mainImage =
+    sortedImages.find((img) => img.isDefault)?.url ||
+    sortedImages[0]?.url ||
+    '';
+  const imageUrls = sortedImages.map((img) => img.url);
+
+  const avgRating =
+    product.reviews.length > 0
+      ? product.reviews.reduce((sum, r) => sum + r.rating, 0) / product.reviews.length
+      : 0;
+
+  const status = !product.isActive
+    ? 'inactive'
+    : product.quantity === 0
+    ? 'out_of_stock'
+    : 'active';
+
+  return {
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    description: product.description || '',
+    shortDescription: product.shortDescription || '',
+    price: product.price.toNumber(),
+    originalPrice: product.compareAtPrice ? product.compareAtPrice.toNumber() : null,
+    image: mainImage,
+    images: imageUrls,
+    sku: product.sku,
+    stock: product.quantity,
+    category: product.category?.name || '',
+    categorySlug: product.category?.slug || '',
+    brand: product.brand?.name || '',
+    brandSlug: product.brand?.slug || '',
+    rating: Math.round(avgRating * 10) / 10,
+    reviews: product.reviews.length,
+    inStock: product.quantity > 0 && product.isActive,
+    status,
+    featured: product.isFeatured,
+    isNew: product.isNew,
+    metaTitle: product.metaTitle || '',
+    metaDescription: product.metaDescription || '',
+    tags: product.metaKeywords || '',
+    variants: product.variants.map((v) => ({
+      id: v.id,
+      sku: v.sku,
+      name: v.name,
+      price: v.price ? v.price.toNumber() : product.price.toNumber(),
+      stock: v.quantity,
+      attributes: v.attributes,
+    })),
+    createdAt: product.createdAt.toISOString(),
+    updatedAt: product.updatedAt.toISOString(),
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Parse query parameters
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const category = searchParams.get('category');
-    const subcategory = searchParams.get('subcategory');
     const brand = searchParams.get('brand');
     const minPrice = searchParams.get('minPrice');
     const maxPrice = searchParams.get('maxPrice');
     const inStock = searchParams.get('inStock');
     const search = searchParams.get('search');
     const sort = searchParams.get('sort') || 'createdAt';
-    const order = searchParams.get('order') || 'desc';
+    const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc';
+    // Admin panel can pass activeOnly=false to see all products
+    const activeOnly = searchParams.get('activeOnly') !== 'false';
 
-    let filteredProducts = [...mockProducts];
+    const where: Parameters<typeof prisma.product.findMany>[0]['where'] = {};
 
-    // Apply filters
-    if (category) {
-      filteredProducts = filteredProducts.filter(p => p.category === category);
+    if (activeOnly) {
+      where.isActive = true;
     }
 
-    if (subcategory) {
-      filteredProducts = filteredProducts.filter(p => p.subcategory === subcategory);
+    if (category) {
+      where.category = {
+        OR: [
+          { name: { equals: category, mode: 'insensitive' } },
+          { slug: { equals: toSlug(category) } },
+        ],
+      };
     }
 
     if (brand) {
-      filteredProducts = filteredProducts.filter(p => p.brand.toLowerCase().includes(brand.toLowerCase()));
+      where.brand = {
+        name: { contains: brand, mode: 'insensitive' },
+      };
     }
 
-    if (minPrice) {
-      filteredProducts = filteredProducts.filter(p => p.price >= parseInt(minPrice));
-    }
-
-    if (maxPrice) {
-      filteredProducts = filteredProducts.filter(p => p.price <= parseInt(maxPrice));
+    if (minPrice || maxPrice) {
+      where.price = {};
+      if (minPrice) (where.price as { gte?: number; lte?: number }).gte = parseFloat(minPrice);
+      if (maxPrice) (where.price as { gte?: number; lte?: number }).lte = parseFloat(maxPrice);
     }
 
     if (inStock === 'true') {
-      filteredProducts = filteredProducts.filter(p => p.inStock);
+      where.quantity = { gt: 0 };
     }
 
     if (search) {
-      const searchLower = search.toLowerCase();
-      filteredProducts = filteredProducts.filter(p =>
-        p.name.toLowerCase().includes(searchLower) ||
-        p.description.toLowerCase().includes(searchLower) ||
-        p.brand.toLowerCase().includes(searchLower) ||
-        p.tags.some(tag => tag.toLowerCase().includes(searchLower))
-      );
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { brand: { name: { contains: search, mode: 'insensitive' } } },
+        { metaKeywords: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    // Apply sorting
-    filteredProducts.sort((a, b) => {
-      let comparison = 0;
+    const orderByMap: Record<string, Parameters<typeof prisma.product.findMany>[0]['orderBy']> = {
+      name: { name: order },
+      price: { price: order },
+      createdAt: { createdAt: order },
+    };
+    const orderBy = orderByMap[sort] ?? { createdAt: 'desc' };
 
-      switch (sort) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
-          break;
-        case 'price':
-          comparison = a.price - b.price;
-          break;
-        case 'rating':
-          comparison = a.rating - b.rating;
-          break;
-        case 'reviews':
-          comparison = a.reviews - b.reviews;
-          break;
-        case 'createdAt':
-          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-          break;
-        default:
-          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }
+    const [total, products] = await Promise.all([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        include: {
+          images: { orderBy: { sortOrder: 'asc' } },
+          category: true,
+          brand: true,
+          variants: true,
+          reviews: { select: { rating: true } },
+        },
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
 
-      return order === 'desc' ? -comparison : comparison;
-    });
-
-    // Pagination
-    const total = filteredProducts.length;
     const totalPages = Math.ceil(total / limit);
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const products = filteredProducts.slice(startIndex, endIndex);
 
     return NextResponse.json({
-      products,
+      products: products.map(formatProduct),
       pagination: {
         page,
         limit,
         total,
         totalPages,
         hasNext: page < totalPages,
-        hasPrev: page > 1
+        hasPrev: page > 1,
       },
-      filters: {
-        categories: Array.from(new Set(mockProducts.map(p => p.category))),
-        brands: Array.from(new Set(mockProducts.map(p => p.brand))),
-        priceRange: {
-          min: Math.min(...mockProducts.map(p => p.price)),
-          max: Math.max(...mockProducts.map(p => p.price))
-        }
-      }
     });
-
   } catch (error) {
     console.error('Error fetching products:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch products' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
   }
 }
 
@@ -168,36 +200,151 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Validate required fields
-    const requiredFields = ['name', 'price', 'category', 'brand'];
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return NextResponse.json(
-          { error: `${field} is required` },
-          { status: 400 }
-        );
-      }
+    if (!body.name?.trim()) {
+      return NextResponse.json({ error: 'name is required' }, { status: 400 });
+    }
+    if (!body.brand?.trim()) {
+      return NextResponse.json({ error: 'brand is required' }, { status: 400 });
     }
 
-    // Create new product (in production, this would save to database)
-    const newProduct = {
-      id: Date.now().toString(),
-      ...body,
-      slug: body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      rating: 0,
-      reviews: 0,
-      inStock: body.inStock ?? true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    // Derive price from first variant or direct field
+    const basePrice =
+      body.variants?.[0]?.price
+        ? parseFloat(body.variants[0].price)
+        : body.price
+        ? parseFloat(body.price)
+        : 0;
 
-    return NextResponse.json(newProduct, { status: 201 });
+    if (basePrice <= 0) {
+      return NextResponse.json({ error: 'Valid price is required' }, { status: 400 });
+    }
 
-  } catch (error) {
+    // Calculate total stock from variants
+    const totalStock =
+      body.variants?.length > 0
+        ? (body.variants as Array<{ stock: string }>).reduce(
+            (sum, v) => sum + (parseInt(v.stock) || 0),
+            0
+          )
+        : parseInt(body.stock) || 0;
+
+    // Generate unique slug – append timestamp if needed
+    const baseSlug = body.urlSlug?.trim() || toSlug(body.name);
+    const slug = `${baseSlug}-${Date.now()}`;
+
+    // Use first variant SKU or generate one
+    const sku = body.variants?.[0]?.sku?.trim() || `SKU-${Date.now()}`;
+
+    // Find or create Category
+    let categoryId: string | undefined;
+    if (body.category?.trim()) {
+      const categorySlug = toSlug(body.category);
+      const category = await prisma.category.upsert({
+        where: { slug: categorySlug },
+        update: {},
+        create: { name: body.category, slug: categorySlug, isActive: true },
+      });
+      categoryId = category.id;
+    }
+
+    // Find or create Brand
+    let brandId: string | undefined;
+    if (body.brand?.trim()) {
+      const brandSlug = toSlug(body.brand);
+      const brand = await prisma.brand.upsert({
+        where: { slug: brandSlug },
+        update: {},
+        create: { name: body.brand, slug: brandSlug, isActive: true },
+      });
+      brandId = brand.id;
+    }
+
+    const isActive = body.status !== 'inactive';
+    const isFeatured = body.featured === true || body.featured === 'true';
+    const compareAtPrice = body.originalPrice ? parseFloat(body.originalPrice) : null;
+
+    const imagesList: string[] = Array.isArray(body.images) ? body.images : [];
+    const variantsList: Array<{
+      sku?: string;
+      size?: string;
+      color?: string;
+      price?: string;
+      stock?: string;
+    }> = Array.isArray(body.variants) ? body.variants : [];
+
+    const product = await prisma.product.create({
+      data: {
+        sku,
+        name: body.name.trim(),
+        slug,
+        description: body.description?.trim() || null,
+        shortDescription: body.description
+          ? body.description.substring(0, 150)
+          : null,
+        price: basePrice,
+        compareAtPrice,
+        quantity: totalStock,
+        lowStockThreshold: body.lowStockThreshold ? parseInt(body.lowStockThreshold) : 5,
+        isActive,
+        isFeatured,
+        isNew: true,
+        metaTitle: body.metaTitle?.trim() || null,
+        metaDescription: body.metaDescription?.trim() || null,
+        metaKeywords: body.tags?.trim() || null,
+        categoryId,
+        brandId,
+        images:
+          imagesList.length > 0
+            ? {
+                create: imagesList.map((url, index) => ({
+                  url,
+                  alt: body.name,
+                  sortOrder: index,
+                  isDefault: index === 0,
+                })),
+              }
+            : undefined,
+        variants:
+          variantsList.length > 0
+            ? {
+                create: variantsList.map((v, index) => ({
+                  sku: v.sku?.trim() || `${sku}-${index + 1}`,
+                  name:
+                    [v.size, v.color].filter(Boolean).join(' / ') ||
+                    `Variant ${index + 1}`,
+                  price: v.price ? parseFloat(v.price) : null,
+                  quantity: parseInt(v.stock || '0') || 0,
+                  attributes: {
+                    ...(v.size ? { size: v.size } : {}),
+                    ...(v.color ? { color: v.color } : {}),
+                  },
+                })),
+              }
+            : undefined,
+      },
+      include: {
+        images: { orderBy: { sortOrder: 'asc' } },
+        category: true,
+        brand: true,
+        variants: true,
+        reviews: { select: { rating: true } },
+      },
+    });
+
+    return NextResponse.json(formatProduct(product), { status: 201 });
+  } catch (error: unknown) {
     console.error('Error creating product:', error);
-    return NextResponse.json(
-      { error: 'Failed to create product' },
-      { status: 500 }
-    );
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: string }).code === 'P2002'
+    ) {
+      return NextResponse.json(
+        { error: 'A product with this slug or SKU already exists' },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
   }
 }

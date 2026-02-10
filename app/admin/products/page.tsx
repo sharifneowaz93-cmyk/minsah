@@ -1,9 +1,8 @@
-﻿'use client';
+'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAdminAuth, PERMISSIONS } from '@/contexts/AdminAuthContext';
-import { useProducts } from '@/contexts/ProductsContext';
 import {
   Search,
   Plus,
@@ -16,7 +15,23 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { formatPrice, convertUSDtoBDT } from '@/utils/currency';
-import type { Product } from '@/contexts/ProductsContext';
+
+interface ApiProduct {
+  id: string;
+  name: string;
+  category: string;
+  brand: string;
+  price: number;
+  originalPrice: number | null;
+  stock: number;
+  status: 'active' | 'inactive' | 'out_of_stock';
+  image: string;
+  images: string[];
+  rating: number;
+  reviews: number;
+  createdAt: string;
+  featured: boolean;
+}
 
 interface ProductFilters {
   search: string;
@@ -47,8 +62,9 @@ const sortOptions = [
 
 export default function ProductsPage() {
   const { hasPermission } = useAdminAuth();
-  const { products, deleteProduct } = useProducts();
 
+  const [products, setProducts] = useState<ApiProduct[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ProductFilters>({
     search: '',
     category: 'All Categories',
@@ -58,42 +74,81 @@ export default function ProductsPage() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ activeOnly: 'false', limit: '100' });
+      if (filters.category && filters.category !== 'All Categories') {
+        params.set('category', filters.category);
+      }
+      if (filters.search) {
+        params.set('search', filters.search);
+      }
+      const res = await fetch(`/api/products?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch products');
+      const data = await res.json();
+      setProducts(data.products || []);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.category, filters.search]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const handleDeleteProduct = async (productId: string) => {
+    try {
+      const res = await fetch(`/api/products/${productId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      setProducts((prev) => prev.filter((p) => p.id !== productId));
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      alert('Failed to delete product');
+    }
+  };
+
   if (!hasPermission(PERMISSIONS.PRODUCTS_VIEW)) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-gray-500">You don't have permission to view products.</p>
+        <p className="text-gray-500">You don&apos;t have permission to view products.</p>
       </div>
     );
   }
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-                         product.category.toLowerCase().includes(filters.search.toLowerCase());
-    const matchesCategory = filters.category === 'All Categories' || product.category === filters.category;
-    const matchesStatus = !filters.status || product.status === filters.status;
-
-    return matchesSearch && matchesCategory && matchesStatus;
-  }).sort((a, b) => {
-    switch (filters.sortBy) {
-      case 'name':
-        return a.name.localeCompare(b.name);
-      case 'price_low':
-        return a.price - b.price;
-      case 'price_high':
-        return b.price - a.price;
-      case 'stock':
-        return b.stock - a.stock;
-      case 'rating':
-        return b.rating - a.rating;
-      case 'created':
-      default:
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    }
-  });
+  const filteredProducts = products
+    .filter((product) => {
+      const matchesSearch =
+        product.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+        product.category.toLowerCase().includes(filters.search.toLowerCase());
+      const matchesCategory =
+        filters.category === 'All Categories' || product.category === filters.category;
+      const matchesStatus = !filters.status || product.status === filters.status;
+      return matchesSearch && matchesCategory && matchesStatus;
+    })
+    .sort((a, b) => {
+      switch (filters.sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'price_low':
+          return a.price - b.price;
+        case 'price_high':
+          return b.price - a.price;
+        case 'stock':
+          return b.stock - a.stock;
+        case 'rating':
+          return b.rating - a.rating;
+        case 'created':
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedProducts(filteredProducts.map(p => p.id));
+      setSelectedProducts(filteredProducts.map((p) => p.id));
     } else {
       setSelectedProducts([]);
     }
@@ -103,22 +158,21 @@ export default function ProductsPage() {
     if (checked) {
       setSelectedProducts([...selectedProducts, productId]);
     } else {
-      setSelectedProducts(selectedProducts.filter(id => id !== productId));
+      setSelectedProducts(selectedProducts.filter((id) => id !== productId));
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedProducts.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedProducts.length} product(s)?`)) return;
 
-    if (confirm(`Are you sure you want to delete ${selectedProducts.length} product(s)?`)) {
-      selectedProducts.forEach(productId => {
-        deleteProduct(productId);
-      });
-      setSelectedProducts([]);
+    for (const productId of selectedProducts) {
+      await handleDeleteProduct(productId);
     }
+    setSelectedProducts([]);
   };
 
-  const getStatusColor = (status: Product['status']) => {
+  const getStatusColor = (status: ApiProduct['status']) => {
     switch (status) {
       case 'active':
         return 'bg-green-100 text-green-800';
@@ -159,7 +213,6 @@ export default function ProductsPage() {
       {/* Search and Filters */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -173,7 +226,6 @@ export default function ProductsPage() {
             </div>
           </div>
 
-          {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200"
@@ -183,13 +235,12 @@ export default function ProductsPage() {
             {showFilters && <Layers className="w-4 h-4 ml-2 text-purple-600" />}
           </button>
 
-          {/* Sort */}
           <select
             value={filters.sortBy}
             onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           >
-            {sortOptions.map(option => (
+            {sortOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -197,7 +248,6 @@ export default function ProductsPage() {
           </select>
         </div>
 
-        {/* Expanded Filters */}
         {showFilters && (
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
@@ -207,8 +257,10 @@ export default function ProductsPage() {
                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
-                {categories.map(category => (
-                  <option key={category} value={category}>{category}</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
                 ))}
               </select>
             </div>
@@ -259,156 +311,172 @@ export default function ProductsPage() {
 
       {/* Products Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={selectedProducts.length === filteredProducts.length && filteredProducts.length > 0}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                  />
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Product
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Category
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Price
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Stock
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rating
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredProducts.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading products...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={selectedProducts.includes(product.id)}
-                      onChange={(e) => handleSelectProduct(product.id, e.target.checked)}
+                      checked={
+                        selectedProducts.length === filteredProducts.length &&
+                        filteredProducts.length > 0
+                      }
+                      onChange={(e) => handleSelectAll(e.target.checked)}
                       className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                     />
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="w-full h-full object-cover rounded-lg"
-                          onError={(e) => {
-                            e.currentTarget.src = 'https://via.placeholder.com/40x40?text=Product';
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {product.name}
-                          {product.featured && (
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                              <Star className="w-3 h-3 mr-1" />
-                              Featured
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500">ID: {product.id}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {product.category}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm">
-                      <span className="font-medium text-gray-900">{formatPrice(convertUSDtoBDT(product.price))}</span>
-                      {product.originalPrice != null && product.originalPrice > product.price && (
-                        <span className="ml-2 text-xs text-gray-500 line-through">
-                          {formatPrice(convertUSDtoBDT(product.originalPrice))}
-                        </span>
-                      )}
-                    </div>
-                    {product.originalPrice != null && product.originalPrice > product.price && (
-                    <div className="text-xs text-green-600">
-                      {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
-                    </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className={clsx('text-sm font-medium', getStockColor(product.stock))}>
-                      {product.stock} units
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={clsx(
-                      'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
-                      getStatusColor(product.status)
-                    )}>
-                      {product.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-1">
-                      <Star className="w-4 h-4 text-yellow-400" />
-                      <span className="text-sm text-gray-900">{product.rating}</span>
-                      <span className="text-xs text-gray-500">({product.reviews})</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <Link
-                        href={`/admin/products/${product.id}`}
-                        className="text-purple-600 hover:text-purple-800"
-                        title="View"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Link>
-                      {hasPermission(PERMISSIONS.PRODUCTS_EDIT) && (
-                        <Link
-                          href={`/admin/products/${product.id}/edit`}
-                          className="text-blue-600 hover:text-blue-800"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Link>
-                      )}
-                      {hasPermission(PERMISSIONS.PRODUCTS_DELETE) && (
-                        <button
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to delete ${product.name}?`)) {
-                              deleteProduct(product.id);
-                            }
-                          }}
-                          className="text-red-600 hover:text-red-800"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Product
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Category
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Rating
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredProducts.map((product) => (
+                  <tr key={product.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedProducts.includes(product.id)}
+                        onChange={(e) => handleSelectProduct(product.id, e.target.checked)}
+                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden">
+                          {product.image ? (
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              className="w-full h-full object-cover rounded-lg"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : null}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {product.name}
+                            {product.featured && (
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                <Star className="w-3 h-3 mr-1" />
+                                Featured
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">ID: {product.id}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{product.category}</td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm">
+                        <span className="font-medium text-gray-900">
+                          {formatPrice(convertUSDtoBDT(product.price))}
+                        </span>
+                        {product.originalPrice != null && product.originalPrice > product.price && (
+                          <span className="ml-2 text-xs text-gray-500 line-through">
+                            {formatPrice(convertUSDtoBDT(product.originalPrice))}
+                          </span>
+                        )}
+                      </div>
+                      {product.originalPrice != null && product.originalPrice > product.price && (
+                        <div className="text-xs text-green-600">
+                          {Math.round(
+                            ((product.originalPrice - product.price) / product.originalPrice) * 100
+                          )}
+                          % OFF
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className={clsx('text-sm font-medium', getStockColor(product.stock))}>
+                        {product.stock} units
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={clsx(
+                          'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                          getStatusColor(product.status)
+                        )}
+                      >
+                        {product.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-1">
+                        <Star className="w-4 h-4 text-yellow-400" />
+                        <span className="text-sm text-gray-900">{product.rating}</span>
+                        <span className="text-xs text-gray-500">({product.reviews})</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <Link
+                          href={`/admin/products/${product.id}`}
+                          className="text-purple-600 hover:text-purple-800"
+                          title="View"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                        {hasPermission(PERMISSIONS.PRODUCTS_EDIT) && (
+                          <Link
+                            href={`/admin/products/${product.id}/edit`}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Link>
+                        )}
+                        {hasPermission(PERMISSIONS.PRODUCTS_DELETE) && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete ${product.name}?`)) {
+                                handleDeleteProduct(product.id);
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {filteredProducts.length === 0 && (
+        {!loading && filteredProducts.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-500">No products found matching your criteria.</p>
           </div>
