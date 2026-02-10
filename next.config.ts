@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'minio.minsahbeauty.cloud',
+      },
+      {
+        protocol: 'http',
+        hostname: 'minio',
+        port: '9000',
+      },
+      {
+        protocol: 'https',
         hostname: 'lh3.googleusercontent.com',
       },
       {
@@ -40,7 +49,7 @@ const nextConfig: NextConfig = {
   experimental: {
     // Enable server actions
     serverActions: {
-      bodySizeLimit: '2mb',
+      bodySizeLimit: '10mb',
     },
   },
 
