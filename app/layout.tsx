@@ -11,6 +11,7 @@ import { FacebookPixel } from "@/lib/facebook/pixel";
 import AllPixels from "@/lib/tracking/pixels/AllPixels";
 import { TrackingProvider } from "@/contexts/TrackingContext";
 import { CartProvider } from "@/contexts/CartContext";
+import { ProductsProvider } from "@/contexts/ProductsContext";
 
 const tenorSans = Tenor_Sans({
   weight: "400",
@@ -55,12 +56,14 @@ export default function RootLayout({
         <FacebookPixel />
         <AllPixels />
         <TrackingProvider>
-          <CartProvider>
-            {/* <EncodingProvider> */}
-              {children}
-              <SocialFloatingButtons />
-            {/* </EncodingProvider> */}
-          </CartProvider>
+          <ProductsProvider>
+            <CartProvider>
+              {/* <EncodingProvider> */}
+                {children}
+                <SocialFloatingButtons />
+              {/* </EncodingProvider> */}
+            </CartProvider>
+          </ProductsProvider>
         </TrackingProvider>
       </body>
     </html>
