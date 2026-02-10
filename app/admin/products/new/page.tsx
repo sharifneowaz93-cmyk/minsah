@@ -399,8 +399,6 @@ export default function NewProductPage() {
     // Images Validation
     if (formData.images.length === 0) {
       newErrors.images = 'At least one product image is required';
-    } else if (formData.images.length < 4) {
-      newErrors.images = 'Minimum 4 images are required for product gallery';
     }
 
     // Variants Validation
@@ -508,10 +506,21 @@ export default function NewProductPage() {
       formDataToSend.append('preOrderOption', formData.preOrderOption.toString());
       formDataToSend.append('relatedProducts', formData.relatedProducts);
 
-      // Get the main image (or first image)
-      const mainImage = formData.images.find(img => img.isMain) || formData.images[0];
-      const mainImageUrl = mainImage ? mainImage.preview : '/products/placeholder.jpg';
-      const imageUrls = formData.images.map(img => img.preview);
+      // Convert uploaded files to base64 data URLs so they persist after navigation
+      const toBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+      const base64Images = await Promise.all(formData.images.map(img => toBase64(img.file)));
+      const mainIndex = formData.images.findIndex(img => img.isMain);
+      const mainImageUrl = base64Images.length > 0
+        ? base64Images[mainIndex !== -1 ? mainIndex : 0]
+        : '/products/placeholder.jpg';
+      const imageUrls = base64Images;
 
       // Calculate price from first variant or set default
       const basePrice = formData.variants.length > 0
@@ -864,7 +873,7 @@ export default function NewProductPage() {
             <h2 className="text-lg font-semibold text-gray-900">Product Images</h2>
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Upload 4-6 high-quality images (Minimum 4 required). Maximum file size: 5MB per image. First image will be the main display.
+            Upload product images. Maximum file size: 5MB per image. First image will be the main display.
           </p>
 
           <div className="space-y-4">
