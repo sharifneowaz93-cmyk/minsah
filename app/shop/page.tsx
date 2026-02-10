@@ -2,11 +2,9 @@ import { Suspense } from 'react';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { ChevronRight, Loader2 } from 'lucide-react';
-import { mockProducts, filterOptions } from '@/lib/productData';
-import { filterProducts, sortProducts, parseSearchParams, generatePageTitle, generateMetaDescription } from '@/lib/shopUtils';
-import ProductCard from '@/app/components/shop/ProductCard';
-import ActiveFilters from '@/app/components/shop/ActiveFilters';
-import SortDropdown from '@/app/components/shop/SortDropdown';
+import { mockProducts } from '@/lib/productData';
+import { parseSearchParams, generatePageTitle, generateMetaDescription } from '@/lib/shopUtils';
+import ShopGrid from '@/app/components/shop/ShopGrid';
 
 // Generate dynamic metadata
 export async function generateMetadata({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }): Promise<Metadata> {
@@ -30,7 +28,7 @@ export async function generateMetadata({ searchParams }: { searchParams: { [key:
   };
 }
 
-// Loading skeleton component
+// Loading skeleton
 function ProductGridSkeleton() {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -42,89 +40,6 @@ function ProductGridSkeleton() {
         </div>
       ))}
     </div>
-  );
-}
-
-// Main Shop Page Content (Server Component)
-async function ShopContent({ searchParams }: { searchParams: { [key: string]: string | string[] | undefined } }) {
-  // Parse search params
-  const params = new URLSearchParams();
-  Object.entries(searchParams).forEach(([key, value]) => {
-    if (value) params.set(key, Array.isArray(value) ? value.join(',') : value);
-  });
-
-  const filters = parseSearchParams(params);
-
-  // Filter and sort products
-  const filtered = filterProducts(mockProducts, filters);
-  const sorted = sortProducts(filtered, filters.sort || 'featured');
-
-  // Pagination
-  const pageSize = 20;
-  const page = filters.page || 1;
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  const paginatedProducts = sorted.slice(start, end);
-  const totalPages = Math.ceil(sorted.length / pageSize);
-  const hasMore = page < totalPages;
-
-  return (
-    <>
-      {/* Active Filters & Sort */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <div className="flex-1">
-          <ActiveFilters totalProducts={sorted.length} />
-        </div>
-        <div className="flex-shrink-0">
-          <SortDropdown />
-        </div>
-      </div>
-
-      {/* Products Grid */}
-      {paginatedProducts.length > 0 ? (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-            {paginatedProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-
-          {/* Load More / Pagination */}
-          {hasMore && (
-            <div className="mt-8 flex justify-center">
-              <Link
-                href={`/shop?${new URLSearchParams({ ...Object.fromEntries(params.entries()), page: String(page + 1) }).toString()}`}
-                className="px-6 py-3 bg-minsah-primary text-white rounded-lg hover:bg-minsah-dark transition-colors font-semibold flex items-center gap-2"
-              >
-                Load More Products
-                <ChevronRight size={20} />
-              </Link>
-            </div>
-          )}
-
-          {/* Page Info */}
-          <div className="mt-6 text-center text-sm text-minsah-secondary">
-            Showing {start + 1}-{Math.min(end, sorted.length)} of {sorted.length} products
-            {totalPages > 1 && ` • Page ${page} of ${totalPages}`}
-          </div>
-        </>
-      ) : (
-        /* Empty State */
-        <div className="text-center py-16">
-          <div className="text-6xl mb-4 text-minsah-secondary">&#128269;</div>
-          <h3 className="text-2xl font-bold text-minsah-dark mb-2">No products found</h3>
-          <p className="text-minsah-secondary mb-6">
-            Try adjusting your filters or search for something else
-          </p>
-          <Link
-            href="/shop"
-            className="inline-block px-6 py-3 bg-minsah-primary text-white rounded-lg hover:bg-minsah-dark transition-colors font-semibold"
-          >
-            Clear All Filters
-          </Link>
-        </div>
-      )}
-    </>
   );
 }
 
@@ -168,7 +83,7 @@ export default function ShopPage({ searchParams }: { searchParams: { [key: strin
             </div>
           }
         >
-          <ShopContent searchParams={searchParams} />
+          <ShopGrid />
         </Suspense>
       </div>
 

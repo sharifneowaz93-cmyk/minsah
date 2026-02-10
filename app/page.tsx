@@ -1,45 +1,20 @@
 'use client';
 
 import { useCart } from '@/contexts/CartContext';
+import { useProducts } from '@/contexts/ProductsContext';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Heart, ShoppingCart, Home as HomeIcon, User, ChevronRight, Flame } from 'lucide-react';
 import { formatPrice, convertUSDtoBDT } from '@/utils/currency';
 
-// Sample products data
-const newArrivals = [
-  { id: '1', name: 'Blush Stick Makeup by Mario', price: 32, image: '💄', sku: '#421C00' },
-  { id: '2', name: 'Eye Liner Saga', price: 15, image: '✏️', sku: '#421C00' },
-  { id: '3', name: 'Highlighter Shimla Beauty', price: 23, image: '✨', sku: '#421C00' },
-  { id: '4', name: 'Lipstick Rose Pink', price: 28, image: '💋', sku: '#421C00' },
-  { id: '5', name: 'Concealer Oil coconuts', price: 40, image: '🧴', sku: '#421C00' },
-  { id: '6', name: 'Eye Liner Kiss Nomzy', price: 40, image: '👁️', sku: '#421C00' },
-  { id: '7', name: 'Eye Liner Nagid', price: 15, image: '✏️', sku: '#421C00' },
-  { id: '8', name: 'Highlighter Evan Binary', price: 38, image: '✨', sku: '#421C00' },
-];
-
-const forYouProducts = [
-  { id: '9', name: 'Blush Stick Makeup by Mario', price: 32, image: '💄' },
-  { id: '10', name: 'Eye Liner Nagid', price: 15, image: '✏️' },
-  { id: '11', name: 'Highlighter Shimla Benny Beauty', price: 53, image: '✨' },
-];
-
-const recommendations = [
-  { id: '12', name: 'Blush Mlick Makeup by Mario', price: 32, rating: 5, reviews: 6, image: '💄' },
-  { id: '13', name: 'Eye Liner Nagid', price: 15, rating: 5, reviews: 6, image: '✏️' },
-  { id: '14', name: 'Color Corrector Helez Beauty', price: 28, rating: 5, reviews: 6, image: '🎨' },
-  { id: '15', name: 'Brontzo Dohd browon', price: 10, rating: 4, reviews: 6, image: '🖌️' },
-  { id: '16', name: 'Eye Palette Revenda', price: 10, rating: 4, reviews: 0, image: '🎨' },
-];
-
-const favourites = [
-  { id: '17', name: 'Lip Gloss Xellion', price: 25, rating: 5, reviews: 6, image: '💋' },
-  { id: '18', name: 'Fragrance E-Him', price: 200, rating: 1, reviews: 6, image: '🌸' },
-  { id: '19', name: 'Foschresh Skingle', price: 8, rating: 3, reviews: 0, image: '🧴' },
-  { id: '20', name: 'Fragrance Oman', price: 20, rating: 0, reviews: 0, image: '🌺' },
-  { id: '21', name: 'Fragrance Quent', price: 10, rating: 0, reviews: 0, image: '🌹' },
-  { id: '22', name: 'Wrinkle Cream Uteopia', price: 35, rating: 3, reviews: 0, image: '🧴' },
-];
+// Helper: render a real image URL or fall back to emoji text
+function ProductImage({ src, alt }: { src: string; alt: string }) {
+  const isUrl = src.startsWith('/') || src.startsWith('http') || src.startsWith('data:');
+  if (isUrl) {
+    return <img src={src} alt={alt} className="w-full h-full object-cover rounded-inherit" />;
+  }
+  return <span className="text-4xl">{src}</span>;
+}
 
 const brands = [
   { name: 'MAC', logo: 'MAC' },
@@ -56,12 +31,6 @@ const categories = [
   { name: 'Tools', icon: '🖌️', color: 'bg-green-100' },
 ];
 
-const flashSaleProducts = [
-  { id: 'f1', name: 'Mush Stick Makeup by Mario', price: 32, originalPrice: 50, discount: 36, image: '💄' },
-  { id: 'f2', name: 'Foundation Charlotta Tilbury', price: 30, originalPrice: 50, discount: 40, image: '🧴' },
-  { id: 'f3', name: 'Eye Liner Sega', price: 13, originalPrice: 25, discount: 48, image: '✏️' },
-  { id: 'f4', name: 'Co', price: 14, originalPrice: 30, discount: 53, image: '🖌️' },
-];
 
 const comboSlides = [
   {
@@ -86,10 +55,69 @@ const comboSlides = [
 
 export default function HomePage() {
   const { items } = useCart();
+  const { products } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [currentSlide, setCurrentSlide] = useState(0);
   const [currentComboSlide, setCurrentComboSlide] = useState(0);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 7, minutes: 33, seconds: 28 });
+
+  const activeProducts = useMemo(
+    () => products.filter(p => p.status === 'active'),
+    [products]
+  );
+
+  // New Arrivals: most recently added active products
+  const newArrivals = useMemo(
+    () =>
+      [...activeProducts]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 8)
+        .map(p => ({ id: p.id, name: p.name, price: p.price, image: p.image, sku: p.category })),
+    [activeProducts]
+  );
+
+  // For You: first 6 active products
+  const forYouProducts = useMemo(
+    () => activeProducts.slice(0, 6).map(p => ({ id: p.id, name: p.name, price: p.price, image: p.image })),
+    [activeProducts]
+  );
+
+  // Recommendations: highest-rated active products
+  const recommendations = useMemo(
+    () =>
+      [...activeProducts]
+        .sort((a, b) => b.rating - a.rating)
+        .slice(0, 6)
+        .map(p => ({ id: p.id, name: p.name, price: p.price, rating: Math.round(p.rating), reviews: p.reviews, image: p.image })),
+    [activeProducts]
+  );
+
+  // Favourites: featured active products, fallback to any active
+  const favourites = useMemo(
+    () =>
+      [...activeProducts]
+        .sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0))
+        .slice(0, 6)
+        .map(p => ({ id: p.id, name: p.name, price: p.price, rating: Math.round(p.rating), reviews: p.reviews, image: p.image })),
+    [activeProducts]
+  );
+
+  // Flash Sale: active products that have a lower price than originalPrice
+  const flashSaleProducts = useMemo(
+    () =>
+      activeProducts
+        .filter(p => p.originalPrice != null && p.originalPrice > p.price)
+        .slice(0, 4)
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          originalPrice: p.originalPrice as number,
+          discount: Math.round(((p.originalPrice as number - p.price) / (p.originalPrice as number)) * 100),
+          image: p.image,
+        })),
+    [activeProducts]
+  );
 
   // Countdown timer
   useEffect(() => {
@@ -289,8 +317,8 @@ export default function HomePage() {
               className="bg-white rounded-xl p-3 shadow-sm"
             >
               <div className="relative mb-2">
-                <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center text-4xl mb-2">
-                  {product.image}
+                <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center overflow-hidden mb-2">
+                  <ProductImage src={product.image} alt={product.name} />
                 </div>
                 <div className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
                   {product.discount}%
@@ -327,8 +355,8 @@ export default function HomePage() {
               className="bg-minsah-accent rounded-2xl p-3"
             >
               <div className="relative mb-2">
-                <div className="w-full aspect-square bg-white rounded-xl flex items-center justify-center text-4xl mb-2">
-                  {product.image}
+                <div className="w-full aspect-square bg-white rounded-xl flex items-center justify-center overflow-hidden mb-2">
+                  <ProductImage src={product.image} alt={product.name} />
                 </div>
                 <button className="absolute top-2 right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
                   <Heart size={16} className="text-minsah-secondary" />
@@ -361,8 +389,8 @@ export default function HomePage() {
               className="bg-white rounded-2xl p-3 flex-shrink-0 w-32"
             >
               <div className="relative mb-2">
-                <div className="w-full aspect-square bg-minsah-accent rounded-xl flex items-center justify-center text-4xl mb-2">
-                  {product.image}
+                <div className="w-full aspect-square bg-minsah-accent rounded-xl flex items-center justify-center overflow-hidden mb-2">
+                  <ProductImage src={product.image} alt={product.name} />
                 </div>
                 <button className="absolute top-2 right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm">
                   <Heart size={14} className="text-minsah-secondary fill-red-500" />
@@ -394,8 +422,8 @@ export default function HomePage() {
               className="bg-minsah-accent rounded-xl p-2"
             >
               <div className="relative mb-2">
-                <div className="w-full aspect-square bg-white rounded-lg flex items-center justify-center text-2xl mb-1">
-                  {product.image}
+                <div className="w-full aspect-square bg-white rounded-lg flex items-center justify-center overflow-hidden mb-1">
+                  <ProductImage src={product.image} alt={product.name} />
                 </div>
                 <button className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
                   <Heart size={12} className="text-minsah-secondary" />
@@ -435,8 +463,8 @@ export default function HomePage() {
               className="bg-white rounded-xl p-2"
             >
               <div className="relative mb-2">
-                <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center text-2xl mb-1">
-                  {product.image}
+                <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center overflow-hidden mb-1">
+                  <ProductImage src={product.image} alt={product.name} />
                 </div>
                 <button className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
                   <Heart size={12} className="text-red-500 fill-red-500" />
