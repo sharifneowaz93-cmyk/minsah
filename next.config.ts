@@ -100,11 +100,10 @@ const nextConfig: NextConfig = {
         source: '/admin',
         destination: '/admin/login',
         permanent: false,
-        has: [
+        missing: [
           {
             type: 'cookie',
             key: 'admin_access_token',
-            value: undefined,
           },
         ],
       },
