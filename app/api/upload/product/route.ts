@@ -1,0 +1,35 @@
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { uploadProductImage, validateImageUpload } from '@/lib/storage/minio';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
+    const productId = (formData.get('productId') as string) || 'general';
+
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    }
+
+    const validation = validateImageUpload({ size: file.size, type: file.type });
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const result = await uploadProductImage(buffer, productId, file.name, file.type);
+
+    return NextResponse.json({
+      success: true,
+      key: result.key,
+      url: result.url,
+    });
+  } catch (error) {
+    console.error('Product image upload error:', error);
+    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+  }
+}

@@ -40,7 +40,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Default bucket name
-const BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'minsah-beauty';
+export const BUCKET_NAME = process.env.MINIO_BUCKET_NAME || 'minsah-beauty';
 
 // Public URL for serving files
 const PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_PUBLIC_URL || '';
@@ -54,28 +54,32 @@ export async function initializeBucket(): Promise<void> {
     if (!exists) {
       await minio.makeBucket(BUCKET_NAME, 'us-east-1');
       logger.info(`Bucket '${BUCKET_NAME}' created successfully`);
-
-      // Set bucket policy for public read access on specific paths
-      const policy = {
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Effect: 'Allow',
-            Principal: { AWS: ['*'] },
-            Action: ['s3:GetObject'],
-            Resource: [
-              `arn:aws:s3:::${BUCKET_NAME}/products/*`,
-              `arn:aws:s3:::${BUCKET_NAME}/categories/*`,
-              `arn:aws:s3:::${BUCKET_NAME}/brands/*`,
-              `arn:aws:s3:::${BUCKET_NAME}/avatars/*`,
-            ],
-          },
-        ],
-      };
-
-      await minio.setBucketPolicy(BUCKET_NAME, JSON.stringify(policy));
-      logger.info('Bucket policy set for public access');
     }
+
+    // Set bucket policy for public read access on all media paths
+    const policy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Principal: { AWS: ['*'] },
+          Action: ['s3:GetObject'],
+          Resource: [
+            `arn:aws:s3:::${BUCKET_NAME}/products/*`,
+            `arn:aws:s3:::${BUCKET_NAME}/categories/*`,
+            `arn:aws:s3:::${BUCKET_NAME}/brands/*`,
+            `arn:aws:s3:::${BUCKET_NAME}/avatars/*`,
+            `arn:aws:s3:::${BUCKET_NAME}/banners/*`,
+            `arn:aws:s3:::${BUCKET_NAME}/blog/*`,
+            `arn:aws:s3:::${BUCKET_NAME}/media/*`,
+            `arn:aws:s3:::${BUCKET_NAME}/uploads/*`,
+          ],
+        },
+      ],
+    };
+
+    await minio.setBucketPolicy(BUCKET_NAME, JSON.stringify(policy));
+    logger.info('MinIO bucket policy set for public read access');
   } catch (error) {
     logger.error('Failed to initialize MinIO bucket:', error);
     throw error;
@@ -91,7 +95,8 @@ export async function uploadFile(
   folder: string = 'uploads',
   contentType: string = 'application/octet-stream'
 ): Promise<{ key: string; url: string }> {
-  const key = `${folder}/${Date.now()}-${fileName}`;
+  const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
+  const key = `${folder}/${Date.now()}-${sanitizedName}`;
 
   await minio.putObject(BUCKET_NAME, key, file, file.length, {
     'Content-Type': contentType,
@@ -152,6 +157,41 @@ export async function uploadBrandLogo(
 }
 
 /**
+ * Upload a banner image
+ */
+export async function uploadBannerImage(
+  file: Buffer,
+  bannerId: string,
+  fileName: string,
+  contentType: string = 'image/jpeg'
+): Promise<{ key: string; url: string }> {
+  return uploadFile(file, fileName, `banners/${bannerId}`, contentType);
+}
+
+/**
+ * Upload a blog image
+ */
+export async function uploadBlogImage(
+  file: Buffer,
+  blogId: string,
+  fileName: string,
+  contentType: string = 'image/jpeg'
+): Promise<{ key: string; url: string }> {
+  return uploadFile(file, fileName, `blog/${blogId}`, contentType);
+}
+
+/**
+ * Upload a general media file
+ */
+export async function uploadMediaFile(
+  file: Buffer,
+  fileName: string,
+  contentType: string = 'application/octet-stream'
+): Promise<{ key: string; url: string }> {
+  return uploadFile(file, fileName, 'media', contentType);
+}
+
+/**
  * Delete a file from MinIO
  */
 export async function deleteFile(key: string): Promise<void> {
@@ -191,6 +231,19 @@ export async function listObjects(
     stream.on('error', reject);
     stream.on('end', () => resolve(objects));
   });
+}
+
+/**
+ * List all objects in the bucket with optional prefix
+ */
+export async function listAllObjects(
+  prefix: string = ''
+): Promise<Array<{ name: string; size: number; lastModified: Date; url: string }>> {
+  const objects = await listObjects(prefix);
+  return objects.map((obj) => ({
+    ...obj,
+    url: getPublicUrl(obj.name),
+  }));
 }
 
 /**
@@ -265,7 +318,7 @@ export async function fileExists(key: string): Promise<boolean> {
  */
 export function validateImageUpload(
   file: { size: number; type: string },
-  maxSizeMB: number = 5
+  maxSizeMB: number = 10
 ): { valid: boolean; error?: string } {
   const maxSize = maxSizeMB * 1024 * 1024;
 
