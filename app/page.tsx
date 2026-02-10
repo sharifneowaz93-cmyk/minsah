@@ -54,12 +54,26 @@ const comboSlides = [
 ];
 
 export default function HomePage() {
-  const { items } = useCart();
+  const { items, addItem } = useCart();
   const { products } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [currentSlide, setCurrentSlide] = useState(0);
   const [currentComboSlide, setCurrentComboSlide] = useState(0);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 7, minutes: 33, seconds: 28 });
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+
+  const handleAddToCart = (
+    e: React.MouseEvent,
+    product: { id: string; name: string; price: number; image: string }
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addItem({ id: product.id, name: product.name, price: product.price, quantity: 1, image: product.image });
+    setAddedIds(prev => new Set(prev).add(product.id));
+    setTimeout(() => {
+      setAddedIds(prev => { const next = new Set(prev); next.delete(product.id); return next; });
+    }, 1500);
+  };
 
   const activeProducts = useMemo(
     () => products.filter(p => p.status === 'active'),
@@ -311,29 +325,33 @@ export default function HomePage() {
         {/* Flash Sale Products */}
         <div className="grid grid-cols-2 gap-3">
           {flashSaleProducts.map((product) => (
-            <Link
-              key={product.id}
-              href={`/products/${product.id}`}
-              className="bg-white rounded-xl p-3 shadow-sm"
-            >
-              <div className="relative mb-2">
-                <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center overflow-hidden mb-2">
-                  <ProductImage src={product.image} alt={product.name} />
+            <div key={product.id} className="bg-white rounded-xl p-3 shadow-sm relative">
+              <Link href={`/products/${product.id}`}>
+                <div className="relative mb-2">
+                  <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center overflow-hidden mb-2">
+                    <ProductImage src={product.image} alt={product.name} />
+                  </div>
+                  <div className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
+                    {product.discount}%
+                  </div>
                 </div>
-                <div className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
-                  {product.discount}%
+                <h3 className="text-xs font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-bold text-minsah-primary">
+                    {formatPrice(convertUSDtoBDT(product.price))}
+                  </span>
+                  <span className="text-xs text-minsah-secondary line-through">
+                    {formatPrice(convertUSDtoBDT(product.originalPrice))}
+                  </span>
                 </div>
-              </div>
-              <h3 className="text-xs font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-minsah-primary">
-                  {formatPrice(convertUSDtoBDT(product.price))}
-                </span>
-                <span className="text-xs text-minsah-secondary line-through">
-                  {formatPrice(convertUSDtoBDT(product.originalPrice))}
-                </span>
-              </div>
-            </Link>
+              </Link>
+              <button
+                onClick={(e) => handleAddToCart(e, product)}
+                className={`w-full py-1.5 rounded-lg text-xs font-semibold transition ${addedIds.has(product.id) ? 'bg-green-500 text-white' : 'bg-minsah-primary text-white hover:bg-minsah-dark'}`}
+              >
+                {addedIds.has(product.id) ? '✓ Added' : '🛒 Add to Cart'}
+              </button>
+            </div>
           ))}
         </div>
       </section>
@@ -349,25 +367,29 @@ export default function HomePage() {
 
         <div className="grid grid-cols-2 gap-3">
           {newArrivals.slice(0, 4).map((product) => (
-            <Link
-              key={product.id}
-              href={`/products/${product.id}`}
-              className="bg-minsah-accent rounded-2xl p-3"
-            >
-              <div className="relative mb-2">
-                <div className="w-full aspect-square bg-white rounded-xl flex items-center justify-center overflow-hidden mb-2">
-                  <ProductImage src={product.image} alt={product.name} />
+            <div key={product.id} className="bg-minsah-accent rounded-2xl p-3">
+              <Link href={`/products/${product.id}`}>
+                <div className="relative mb-2">
+                  <div className="w-full aspect-square bg-white rounded-xl flex items-center justify-center overflow-hidden mb-2">
+                    <ProductImage src={product.image} alt={product.name} />
+                  </div>
+                  <div className="absolute top-2 right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
+                    <Heart size={16} className="text-minsah-secondary" />
+                  </div>
                 </div>
-                <button className="absolute top-2 right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
-                  <Heart size={16} className="text-minsah-secondary" />
-                </button>
-              </div>
-              <h3 className="text-xs font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
-              <p className="text-xs text-minsah-secondary mb-1">{product.sku}</p>
-              <span className="text-sm font-bold text-minsah-primary">
-                {formatPrice(convertUSDtoBDT(product.price))}
-              </span>
-            </Link>
+                <h3 className="text-xs font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
+                <p className="text-xs text-minsah-secondary mb-1">{product.sku}</p>
+                <span className="text-sm font-bold text-minsah-primary mb-2 block">
+                  {formatPrice(convertUSDtoBDT(product.price))}
+                </span>
+              </Link>
+              <button
+                onClick={(e) => handleAddToCart(e, product)}
+                className={`w-full py-1.5 rounded-lg text-xs font-semibold transition ${addedIds.has(product.id) ? 'bg-green-500 text-white' : 'bg-minsah-primary text-white hover:bg-minsah-dark'}`}
+              >
+                {addedIds.has(product.id) ? '✓ Added' : '+ Add to Cart'}
+              </button>
+            </div>
           ))}
         </div>
       </section>
@@ -383,24 +405,28 @@ export default function HomePage() {
 
         <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
           {forYouProducts.map((product) => (
-            <Link
-              key={product.id}
-              href={`/products/${product.id}`}
-              className="bg-white rounded-2xl p-3 flex-shrink-0 w-32"
-            >
-              <div className="relative mb-2">
-                <div className="w-full aspect-square bg-minsah-accent rounded-xl flex items-center justify-center overflow-hidden mb-2">
-                  <ProductImage src={product.image} alt={product.name} />
+            <div key={product.id} className="bg-white rounded-2xl p-3 flex-shrink-0 w-36">
+              <Link href={`/products/${product.id}`}>
+                <div className="relative mb-2">
+                  <div className="w-full aspect-square bg-minsah-accent rounded-xl flex items-center justify-center overflow-hidden mb-2">
+                    <ProductImage src={product.image} alt={product.name} />
+                  </div>
+                  <div className="absolute top-2 right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm">
+                    <Heart size={14} className="text-minsah-secondary" />
+                  </div>
                 </div>
-                <button className="absolute top-2 right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-sm">
-                  <Heart size={14} className="text-minsah-secondary fill-red-500" />
-                </button>
-              </div>
-              <h3 className="text-xs font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
-              <span className="text-sm font-bold text-minsah-primary">
-                {formatPrice(convertUSDtoBDT(product.price))}
-              </span>
-            </Link>
+                <h3 className="text-xs font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
+                <span className="text-sm font-bold text-minsah-primary block mb-2">
+                  {formatPrice(convertUSDtoBDT(product.price))}
+                </span>
+              </Link>
+              <button
+                onClick={(e) => handleAddToCart(e, product)}
+                className={`w-full py-1 rounded-lg text-[10px] font-semibold transition ${addedIds.has(product.id) ? 'bg-green-500 text-white' : 'bg-minsah-primary text-white hover:bg-minsah-dark'}`}
+              >
+                {addedIds.has(product.id) ? '✓' : '+ Cart'}
+              </button>
+            </div>
           ))}
         </div>
       </section>
@@ -416,32 +442,36 @@ export default function HomePage() {
 
         <div className="grid grid-cols-3 gap-2">
           {recommendations.slice(0, 6).map((product) => (
-            <Link
-              key={product.id}
-              href={`/products/${product.id}`}
-              className="bg-minsah-accent rounded-xl p-2"
-            >
-              <div className="relative mb-2">
-                <div className="w-full aspect-square bg-white rounded-lg flex items-center justify-center overflow-hidden mb-1">
-                  <ProductImage src={product.image} alt={product.name} />
+            <div key={product.id} className="bg-minsah-accent rounded-xl p-2">
+              <Link href={`/products/${product.id}`}>
+                <div className="relative mb-2">
+                  <div className="w-full aspect-square bg-white rounded-lg flex items-center justify-center overflow-hidden mb-1">
+                    <ProductImage src={product.image} alt={product.name} />
+                  </div>
+                  <div className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
+                    <Heart size={12} className="text-minsah-secondary" />
+                  </div>
                 </div>
-                <button className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
-                  <Heart size={12} className="text-minsah-secondary" />
-                </button>
-              </div>
-              <h3 className="text-[10px] font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
-              <div className="flex items-center gap-1 mb-1">
-                <span className="text-xs font-bold text-minsah-primary">
-                  {formatPrice(convertUSDtoBDT(product.price))}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="flex text-yellow-400 text-[10px]">
-                  {'★'.repeat(product.rating)}{'☆'.repeat(5 - product.rating)}
+                <h3 className="text-[10px] font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-xs font-bold text-minsah-primary">
+                    {formatPrice(convertUSDtoBDT(product.price))}
+                  </span>
                 </div>
-                <span className="text-[8px] text-minsah-secondary">({product.reviews})</span>
-              </div>
-            </Link>
+                <div className="flex items-center gap-1 mb-2">
+                  <div className="flex text-yellow-400 text-[10px]">
+                    {'★'.repeat(product.rating)}{'☆'.repeat(5 - product.rating)}
+                  </div>
+                  <span className="text-[8px] text-minsah-secondary">({product.reviews})</span>
+                </div>
+              </Link>
+              <button
+                onClick={(e) => handleAddToCart(e, product)}
+                className={`w-full py-1 rounded text-[10px] font-semibold transition ${addedIds.has(product.id) ? 'bg-green-500 text-white' : 'bg-minsah-primary text-white hover:bg-minsah-dark'}`}
+              >
+                {addedIds.has(product.id) ? '✓' : '+ Cart'}
+              </button>
+            </div>
           ))}
         </div>
       </section>
@@ -457,24 +487,28 @@ export default function HomePage() {
 
         <div className="grid grid-cols-3 gap-2">
           {favourites.slice(0, 6).map((product) => (
-            <Link
-              key={product.id}
-              href={`/products/${product.id}`}
-              className="bg-white rounded-xl p-2"
-            >
-              <div className="relative mb-2">
-                <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center overflow-hidden mb-1">
-                  <ProductImage src={product.image} alt={product.name} />
+            <div key={product.id} className="bg-white rounded-xl p-2">
+              <Link href={`/products/${product.id}`}>
+                <div className="relative mb-2">
+                  <div className="w-full aspect-square bg-minsah-accent rounded-lg flex items-center justify-center overflow-hidden mb-1">
+                    <ProductImage src={product.image} alt={product.name} />
+                  </div>
+                  <div className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
+                    <Heart size={12} className="text-red-500 fill-red-500" />
+                  </div>
                 </div>
-                <button className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
-                  <Heart size={12} className="text-red-500 fill-red-500" />
-                </button>
-              </div>
-              <h3 className="text-[10px] font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
-              <span className="text-xs font-bold text-minsah-primary">
-                {formatPrice(convertUSDtoBDT(product.price))}
-              </span>
-            </Link>
+                <h3 className="text-[10px] font-semibold text-minsah-dark mb-1 line-clamp-2">{product.name}</h3>
+                <span className="text-xs font-bold text-minsah-primary block mb-2">
+                  {formatPrice(convertUSDtoBDT(product.price))}
+                </span>
+              </Link>
+              <button
+                onClick={(e) => handleAddToCart(e, product)}
+                className={`w-full py-1 rounded text-[10px] font-semibold transition ${addedIds.has(product.id) ? 'bg-green-500 text-white' : 'bg-minsah-primary text-white hover:bg-minsah-dark'}`}
+              >
+                {addedIds.has(product.id) ? '✓' : '+ Cart'}
+              </button>
+            </div>
           ))}
         </div>
       </section>
