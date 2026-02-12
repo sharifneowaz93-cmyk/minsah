@@ -66,18 +66,33 @@ export default function HomeSectionsPage() {
     ));
   };
 
-  // Save changes (in real app, this would call an API)
-  const saveChanges = () => {
-    localStorage.setItem('homeSections', JSON.stringify(sections));
-    alert('Changes saved successfully!');
+  // Save changes to database via API
+  const saveChanges = async () => {
+    try {
+      const res = await fetch('/api/admin/site-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'homeSections', value: sections }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      alert('Changes saved successfully!');
+    } catch {
+      alert('Failed to save changes. Please try again.');
+    }
   };
 
-  // Load from localStorage on mount
+  // Load from database on mount
   useEffect(() => {
-    const saved = localStorage.getItem('homeSections');
-    if (saved) {
-      setSections(JSON.parse(saved));
-    }
+    fetch('/api/admin/site-config?key=homeSections')
+      .then(res => res.json())
+      .then(data => {
+        if (data.value) {
+          setSections(data.value);
+        }
+      })
+      .catch(() => {
+        // keep default sections on error
+      });
   }, []);
 
   const getSectionIcon = (type: SectionType) => {

@@ -17,18 +17,33 @@ export default function CategoriesManagementPage() {
     isVisible: true,
   });
 
-  // Load from localStorage
+  // Load from database on mount
   useEffect(() => {
-    const saved = localStorage.getItem('homeCategories');
-    if (saved) {
-      setCategories(JSON.parse(saved));
-    }
+    fetch('/api/admin/site-config?key=homeCategories')
+      .then(res => res.json())
+      .then(data => {
+        if (data.value) {
+          setCategories(data.value);
+        }
+      })
+      .catch(() => {
+        // keep default categories on error
+      });
   }, []);
 
-  // Save to localStorage
-  const saveCategories = () => {
-    localStorage.setItem('homeCategories', JSON.stringify(categories));
-    alert('Categories saved successfully!');
+  // Save to database via API
+  const saveCategories = async () => {
+    try {
+      const res = await fetch('/api/admin/site-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'homeCategories', value: categories }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      alert('Categories saved successfully!');
+    } catch {
+      alert('Failed to save changes. Please try again.');
+    }
   };
 
   // Add new category
