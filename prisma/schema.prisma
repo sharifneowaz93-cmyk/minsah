@@ -61,8 +61,9 @@ model User {
   wishlistItems     WishlistItem[]
   reviews           Review[]
   refreshTokens     RefreshToken[]
-  customerBehavior  CustomerBehavior?
-  searchHistory     SearchHistory?
+  customerBehavior    CustomerBehavior?
+  searchHistory       SearchHistory?
+  campaignAttribution CampaignAttribution?
 
   @@index([email])
   @@index([referralCode])
@@ -540,6 +541,26 @@ model SearchHistory {
   updatedAt DateTime @updatedAt
 
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([deviceId])
+}
+
+// ==========================================
+// Campaign Attribution
+// ==========================================
+
+model CampaignAttribution {
+  id          String   @id @default(cuid())
+  userId      String?  @unique
+  deviceId    String   @unique
+  firstTouch  Json?    // UTMParameters & { timestamp } — never overwritten once set
+  lastTouch   Json?    // UTMParameters & { timestamp } — always updated
+  touchpoints Json     @default("[]") // Array of (UTMParameters & { timestamp }), max 10
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([deviceId])

@@ -32,6 +32,10 @@ export interface Campaign {
 }
 
 export class CampaignTracker {
+  // Debounce timer for touchpoints sync (called on every page load)
+  private static touchpointSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private static SYNC_DELAY_MS = 4000;
+
   /**
    * Extract UTM parameters from URL
    */
@@ -51,31 +55,31 @@ export class CampaignTracker {
   }
 
   /**
-   * Store first-touch attribution (never overwrite)
+   * Store first-touch attribution (never overwrite) + async DB sync
    */
   static setFirstTouch(utm: UTMParameters): void {
     if (typeof window === 'undefined') return;
 
     const existing = localStorage.getItem('first_touch_attribution');
     if (!existing && Object.keys(utm).some(k => utm[k as keyof UTMParameters])) {
-      localStorage.setItem('first_touch_attribution', JSON.stringify({
-        ...utm,
-        timestamp: Date.now(),
-      }));
+      const touch = { ...utm, timestamp: Date.now() };
+      localStorage.setItem('first_touch_attribution', JSON.stringify(touch));
+      // Sync immediately — first-touch is critical and written only once
+      this.syncToDB({ firstTouch: touch });
     }
   }
 
   /**
-   * Store last-touch attribution (always update)
+   * Store last-touch attribution (always update) + async DB sync
    */
   static setLastTouch(utm: UTMParameters): void {
     if (typeof window === 'undefined') return;
 
     if (Object.keys(utm).some(k => utm[k as keyof UTMParameters])) {
-      localStorage.setItem('last_touch_attribution', JSON.stringify({
-        ...utm,
-        timestamp: Date.now(),
-      }));
+      const touch = { ...utm, timestamp: Date.now() };
+      localStorage.setItem('last_touch_attribution', JSON.stringify(touch));
+      // Sync immediately — last-touch is important for conversion attribution
+      this.syncToDB({ lastTouch: touch });
     }
   }
 
@@ -100,7 +104,7 @@ export class CampaignTracker {
   }
 
   /**
-   * Store touchpoint for multi-touch attribution
+   * Store touchpoint for multi-touch attribution + debounced DB sync
    */
   static addTouchpoint(utm: UTMParameters): void {
     if (typeof window === 'undefined') return;
@@ -108,14 +112,17 @@ export class CampaignTracker {
     if (!Object.keys(utm).some(k => utm[k as keyof UTMParameters])) return;
 
     const touchpoints = this.getTouchpoints();
-    touchpoints.push({
-      ...utm,
-      timestamp: Date.now(),
-    });
+    touchpoints.push({ ...utm, timestamp: Date.now() });
 
     // Keep only last 10 touchpoints
     const limited = touchpoints.slice(-10);
     localStorage.setItem('touchpoints', JSON.stringify(limited));
+
+    // Debounced sync — touchpoints can be added frequently on page loads
+    if (this.touchpointSyncTimer) clearTimeout(this.touchpointSyncTimer);
+    this.touchpointSyncTimer = setTimeout(() => {
+      this.syncToDB({ touchpoints: limited });
+    }, this.SYNC_DELAY_MS);
   }
 
   /**
@@ -231,11 +238,81 @@ export class CampaignTracker {
   }
 
   /**
-   * Clear all attribution data
+   * Persist attribution data to database (async, fire-and-forget)
+   */
+  static async syncToDB(payload: {
+    firstTouch?: Record<string, unknown>;
+    lastTouch?: Record<string, unknown>;
+    touchpoints?: unknown[];
+  }): Promise<void> {
+    if (typeof window === 'undefined') return;
+
+    const deviceId = localStorage.getItem('device_id');
+    if (!deviceId) return;
+
+    try {
+      await fetch('/api/campaign-attribution', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ deviceId, ...payload }),
+      });
+    } catch {
+      // Silently fail — localStorage still has the data
+    }
+  }
+
+  /**
+   * Load attribution from DB and restore into localStorage
+   * Call this on app init or user login
+   */
+  static async loadFromDB(deviceId: string): Promise<void> {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const res = await fetch(
+        `/api/campaign-attribution?deviceId=${encodeURIComponent(deviceId)}`,
+        { credentials: 'include' }
+      );
+      if (!res.ok) return;
+
+      const { firstTouch, lastTouch, touchpoints } = await res.json();
+
+      // Only restore if localStorage doesn't already have a value (preserve local data)
+      if (firstTouch && !localStorage.getItem('first_touch_attribution')) {
+        localStorage.setItem('first_touch_attribution', JSON.stringify(firstTouch));
+      }
+      if (lastTouch) {
+        // Always restore last-touch from DB (DB may be fresher from another device)
+        const local = localStorage.getItem('last_touch_attribution');
+        const localTs = local ? JSON.parse(local).timestamp : 0;
+        if (lastTouch.timestamp > localTs) {
+          localStorage.setItem('last_touch_attribution', JSON.stringify(lastTouch));
+        }
+      }
+      if (Array.isArray(touchpoints) && touchpoints.length > 0) {
+        const local = localStorage.getItem('touchpoints');
+        const localTps: Array<{ timestamp: number }> = local ? JSON.parse(local) : [];
+        // Merge: keep all unique touchpoints, sorted by time, max 10
+        const merged = [...localTps, ...touchpoints]
+          .filter((tp, idx, arr) =>
+            arr.findIndex(t => t.timestamp === tp.timestamp) === idx
+          )
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .slice(-10);
+        localStorage.setItem('touchpoints', JSON.stringify(merged));
+      }
+    } catch {
+      // Silently fall back to localStorage
+    }
+  }
+
+  /**
+   * Clear all attribution data from localStorage
    */
   static clearAttribution(): void {
     if (typeof window === 'undefined') return;
-
+    if (this.touchpointSyncTimer) clearTimeout(this.touchpointSyncTimer);
     localStorage.removeItem('first_touch_attribution');
     localStorage.removeItem('last_touch_attribution');
     localStorage.removeItem('touchpoints');
