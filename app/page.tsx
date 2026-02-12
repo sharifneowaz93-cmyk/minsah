@@ -233,8 +233,11 @@ export default function HomePage() {
               href={`/categories/${category.slug ?? category.name.toLowerCase().replace(/\s+/g, '-')}`}
               className="flex flex-col items-center gap-2 flex-shrink-0"
             >
-              <div className={`w-16 h-16 ${category.color} rounded-full flex items-center justify-center text-3xl`}>
-                {category.icon}
+              <div className={`w-16 h-16 ${category.color} rounded-full flex items-center justify-center text-3xl overflow-hidden`}>
+                {category.icon && (category.icon.startsWith('/') || category.icon.startsWith('http'))
+                  ? <img src={category.icon} alt={category.name} className="w-full h-full object-cover" />
+                  : (category.icon || DEFAULT_CATEGORY_ICON)
+                }
               </div>
               <span className="text-xs text-minsah-dark font-medium text-center">{category.name}</span>
             </Link>
