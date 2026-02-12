@@ -62,6 +62,7 @@ model User {
   reviews           Review[]
   refreshTokens     RefreshToken[]
   customerBehavior  CustomerBehavior?
+  searchHistory     SearchHistory?
 
   @@index([email])
   @@index([referralCode])
@@ -517,6 +518,24 @@ model CustomerBehavior {
   userId    String?  @unique
   deviceId  String   @unique
   data      Json     // Full CustomerBehavior object
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([deviceId])
+}
+
+// ==========================================
+// Search History
+// ==========================================
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String?  @unique
+  deviceId  String   @unique
+  items     Json     // Array of { term, timestamp, resultCount }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
