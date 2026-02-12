@@ -27,7 +27,7 @@ interface CategoryFormData {
 
 export default function CategoriesPage() {
   const { hasPermission } = useAdminAuth();
-  const { categories, saveCategories } = useCategories();
+  const { categories, saveCategories, refreshCategories } = useCategories();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -128,44 +128,36 @@ export default function CategoriesPage() {
     }));
   };
 
-  const handleSaveCategory = () => {
-    if (!formData.name.trim()) {
-      alert('Please enter a category name');
-      return;
-    }
+  const handleSaveCategory = async () => {
+  if (!formData.name.trim()) {
+    alert('Please enter a category name');
+    return;
+  }
 
-    if (editingCategoryId) {
-      // Update existing category
-      const updatedCategories = categories.map(cat =>
-        cat.id === editingCategoryId
-          ? {
-              ...cat,
-              name: formData.name,
-              slug: generateSlug(formData.name),
-              href: `/shop?category=${formData.name}`,
-              status: formData.status,
-              subcategories: formData.subcategories,
-            }
-          : cat
-      );
-      saveCategories(updatedCategories);
-    } else {
-      // Add new category
-      const newCategory: Category = {
-        id: Date.now().toString(),
+  try {
+    const res = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         name: formData.name,
-        slug: generateSlug(formData.name),
-        href: `/shop?category=${formData.name}`,
         status: formData.status,
         subcategories: formData.subcategories,
-        productCount: 0,
-        createdAt: new Date().toISOString(),
-      };
-      saveCategories([...categories, newCategory]);
+      }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to save category');
     }
 
+    await refreshCategories();
     closeModal();
-  };
+    alert('Category saved successfully!');
+  } catch (error) {
+    console.error('Error saving category:', error);
+    alert(error instanceof Error ? error.message : 'Failed to save category');
+  }
+};
 
   const filteredCategories = categories.filter(category =>
     category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -180,12 +172,26 @@ export default function CategoriesPage() {
     );
   };
 
-  const handleDeleteCategory = (categoryId: string) => {
-    const category = categories.find(cat => cat.id === categoryId);
-    if (confirm(`Are you sure you want to delete "${category?.name}"? This will affect all products in this category.`)) {
-      saveCategories(categories.filter(cat => cat.id !== categoryId));
-    }
-  };
+ const handleDeleteCategory = async (categoryId: string) => {
+  const category = categories.find(cat => cat.id === categoryId);
+  if (!confirm(`Are you sure you want to delete "${category?.name}"? This will affect all products in this category.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/categories/${categoryId}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) throw new Error('Failed to delete category');
+    
+    await refreshCategories();
+    alert('Category deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    alert('Failed to delete category');
+  }
+};
 
   const getStatusColor = (status: Category['status']) => {
     return status === 'active'
