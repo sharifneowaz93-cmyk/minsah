@@ -1,10 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { useAuth } from './AuthContext';
 
 // Types
 export interface CartItem {
   id: string;
+  cartItemId?: string; // DB cart item ID (only for logged-in users)
   name: string;
   price: number;
   quantity: number;
@@ -69,18 +71,24 @@ interface CartContextType {
   paymentMethods: PaymentMethod[];
   selectedPaymentMethod: PaymentMethod | null;
   setSelectedPaymentMethod: (method: PaymentMethod | null) => void;
+
+  // Loading state
+  cartLoading: boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  // Cart state — starts empty; restored from localStorage in useEffect
+  const { user } = useAuth();
+
+  // Cart state
   const [items, setItems] = useState<CartItem[]>([]);
+  const [cartLoading, setCartLoading] = useState(false);
 
   const [promoCode, setPromoCode] = useState('');
   const [discount, setDiscount] = useState(0);
 
-  // Address state — starts empty; user adds their own addresses
+  // Address state
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
 
@@ -97,48 +105,215 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Cart calculations
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shippingCost = subtotal > 0 ? 0 : 0; // Free shipping for now
+  const shippingCost = 0; // Free shipping
   const tax = subtotal * 0.05; // 5% tax
   const total = subtotal + shippingCost + tax - discount;
 
-  // Cart functions
-  const addItem = (item: CartItem) => {
-    setItems(prev => {
-      const existing = prev.find(i => i.id === item.id);
-      if (existing) {
-        return prev.map(i =>
-          i.id === item.id
-            ? { ...i, quantity: i.quantity + item.quantity }
-            : i
-        );
+  // ─── DB helpers ───────────────────────────────────────────────
+
+  const fetchCartFromDB = useCallback(async () => {
+    setCartLoading(true);
+    try {
+      const res = await fetch('/api/cart', { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setItems(data.items ?? []);
+      // Sync to localStorage as cache
+      localStorage.setItem('minsah_cart', JSON.stringify(data.items ?? []));
+    } catch {
+      // Network error — fall back to localStorage
+      try {
+        const saved = localStorage.getItem('minsah_cart');
+        if (saved) setItems(JSON.parse(saved));
+      } catch { /* ignore */ }
+    } finally {
+      setCartLoading(false);
+    }
+  }, []);
+
+  // Merge guest localStorage cart into DB on login
+  const mergeGuestCartToDB = useCallback(async (guestItems: CartItem[]) => {
+    for (const item of guestItems) {
+      try {
+        await fetch('/api/cart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ productId: item.id, quantity: item.quantity }),
+        });
+      } catch { /* ignore individual failures */ }
+    }
+  }, []);
+
+  // ─── Load cart on mount / user change ─────────────────────────
+
+  useEffect(() => {
+    if (user) {
+      // Logged-in: check if there's a guest cart to merge first
+      const guestCart = (() => {
+        try {
+          const saved = localStorage.getItem('minsah_cart');
+          return saved ? (JSON.parse(saved) as CartItem[]) : [];
+        } catch { return []; }
+      })();
+
+      const init = async () => {
+        if (guestCart.length > 0) {
+          await mergeGuestCartToDB(guestCart);
+          localStorage.removeItem('minsah_cart');
+        }
+        await fetchCartFromDB();
+      };
+      init();
+    } else {
+      // Guest: load from localStorage
+      try {
+        const saved = localStorage.getItem('minsah_cart');
+        if (saved) setItems(JSON.parse(saved));
+      } catch { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Load addresses from localStorage (addresses still localStorage for now)
+  useEffect(() => {
+    try {
+      const savedAddresses = localStorage.getItem('minsah_addresses');
+      if (savedAddresses) {
+        const parsed: Address[] = JSON.parse(savedAddresses);
+        setAddresses(parsed);
+        const def = parsed.find(a => a.isDefault) || parsed[0] || null;
+        setSelectedAddress(def);
       }
-      return [...prev, item];
-    });
-  };
+    } catch { /* ignore */ }
+  }, []);
 
-  const removeItem = (itemId: string) => {
-    setItems(prev => prev.filter(i => i.id !== itemId));
-  };
+  // Save addresses to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('minsah_addresses', JSON.stringify(addresses));
+  }, [addresses]);
 
-  const updateQuantity = (itemId: string, quantity: number) => {
+  // ─── Cart functions ────────────────────────────────────────────
+
+  const addItem = useCallback(async (item: CartItem) => {
+    if (user) {
+      // Optimistic update
+      setItems(prev => {
+        const existing = prev.find(i => i.id === item.id);
+        if (existing) {
+          return prev.map(i =>
+            i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i
+          );
+        }
+        return [...prev, item];
+      });
+
+      try {
+        await fetch('/api/cart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ productId: item.id, quantity: item.quantity }),
+        });
+        // Re-fetch to get cartItemId from DB
+        await fetchCartFromDB();
+      } catch {
+        // Keep optimistic state on network error
+      }
+    } else {
+      // Guest: localStorage only
+      setItems(prev => {
+        const existing = prev.find(i => i.id === item.id);
+        if (existing) {
+          return prev.map(i =>
+            i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i
+          );
+        }
+        return [...prev, item];
+      });
+    }
+  }, [user, fetchCartFromDB]);
+
+  const removeItem = useCallback(async (itemId: string) => {
+    if (user) {
+      const target = items.find(i => i.id === itemId);
+      // Optimistic update
+      setItems(prev => prev.filter(i => i.id !== itemId));
+
+      if (target?.cartItemId) {
+        try {
+          await fetch(`/api/cart/${target.cartItemId}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+        } catch {
+          // Restore on failure
+          await fetchCartFromDB();
+        }
+      }
+    } else {
+      setItems(prev => prev.filter(i => i.id !== itemId));
+    }
+  }, [user, items, fetchCartFromDB]);
+
+  const updateQuantity = useCallback(async (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       removeItem(itemId);
       return;
     }
-    setItems(prev => prev.map(i =>
-      i.id === itemId ? { ...i, quantity } : i
-    ));
-  };
 
-  const clearCart = () => {
+    if (user) {
+      const target = items.find(i => i.id === itemId);
+      // Optimistic update
+      setItems(prev => prev.map(i => i.id === itemId ? { ...i, quantity } : i));
+
+      if (target?.cartItemId) {
+        try {
+          await fetch(`/api/cart/${target.cartItemId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ quantity }),
+          });
+        } catch {
+          // Restore on failure
+          await fetchCartFromDB();
+        }
+      }
+    } else {
+      setItems(prev => prev.map(i =>
+        i.id === itemId ? { ...i, quantity } : i
+      ));
+    }
+  }, [user, items, removeItem, fetchCartFromDB]);
+
+  const clearCart = useCallback(async () => {
     setItems([]);
     setPromoCode('');
     setDiscount(0);
-  };
 
-  // Promo code function
+    if (user) {
+      try {
+        await fetch('/api/cart', {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+      } catch { /* ignore */ }
+    } else {
+      localStorage.setItem('minsah_cart', JSON.stringify([]));
+    }
+  }, [user]);
+
+  // Save guest cart to localStorage on change (only when not logged in)
+  useEffect(() => {
+    if (!user) {
+      localStorage.setItem('minsah_cart', JSON.stringify(items));
+    }
+  }, [items, user]);
+
+  // ─── Promo code ────────────────────────────────────────────────
+
   const applyPromoCode = () => {
-    // Simple promo code logic - replace with real API call
     const validCodes: Record<string, number> = {
       'SAVE10': subtotal * 0.1,
       'SAVE20': subtotal * 0.2,
@@ -152,16 +327,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Address functions
+  // ─── Address functions ─────────────────────────────────────────
+
   const addAddress = (address: Omit<Address, 'id'>) => {
-    const newAddress: Address = {
-      ...address,
-      id: Date.now().toString()
-    };
+    const newAddress: Address = { ...address, id: Date.now().toString() };
     setAddresses(prev => [...prev, newAddress]);
-    if (address.isDefault) {
-      setSelectedAddress(newAddress);
-    }
+    if (address.isDefault) setSelectedAddress(newAddress);
   };
 
   const updateAddress = (id: string, updates: Partial<Address>) => {
@@ -176,34 +347,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setSelectedAddress(addresses[0] || null);
     }
   };
-
-  // Load cart and addresses from localStorage on mount
-  useEffect(() => {
-    try {
-      const savedCart = localStorage.getItem('minsah_cart');
-      if (savedCart) setItems(JSON.parse(savedCart));
-    } catch { /* ignore */ }
-
-    try {
-      const savedAddresses = localStorage.getItem('minsah_addresses');
-      if (savedAddresses) {
-        const parsed: Address[] = JSON.parse(savedAddresses);
-        setAddresses(parsed);
-        const def = parsed.find(a => a.isDefault) || parsed[0] || null;
-        setSelectedAddress(def);
-      }
-    } catch { /* ignore */ }
-  }, []);
-
-  // Save cart to localStorage on change
-  useEffect(() => {
-    localStorage.setItem('minsah_cart', JSON.stringify(items));
-  }, [items]);
-
-  // Save addresses to localStorage on change
-  useEffect(() => {
-    localStorage.setItem('minsah_addresses', JSON.stringify(addresses));
-  }, [addresses]);
 
   return (
     <CartContext.Provider value={{
@@ -228,7 +371,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       deleteAddress,
       paymentMethods,
       selectedPaymentMethod,
-      setSelectedPaymentMethod
+      setSelectedPaymentMethod,
+      cartLoading,
     }}>
       {children}
     </CartContext.Provider>
