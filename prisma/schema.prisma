@@ -498,6 +498,15 @@ model Coupon {
   @@index([isActive])
 }
 
+model SiteConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
 // ==========================================
 // Enums
 // ==========================================
