@@ -64,6 +64,7 @@ model User {
   customerBehavior    CustomerBehavior?
   searchHistory       SearchHistory?
   campaignAttribution CampaignAttribution?
+  trackingDevice      TrackingDevice?
 
   @@index([email])
   @@index([referralCode])
@@ -561,6 +562,25 @@ model CampaignAttribution {
   updatedAt   DateTime @updatedAt
 
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([deviceId])
+}
+
+// ==========================================
+// Tracking Device (TrackingManager session UTM)
+// ==========================================
+
+model TrackingDevice {
+  id            String   @id @default(cuid())
+  deviceId      String   @unique  // Value stored in 'device_id' localStorage key
+  userId        String?  @unique
+  firstTouchUtm Json?    // { source, medium, campaign, term, content } — only when utm_source present
+  lastTouchUtm  Json?    // { source, medium, campaign, term, content } — updated every session
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([deviceId])
