@@ -175,23 +175,81 @@ export function CartProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Load addresses from localStorage (addresses still localStorage for now)
-  useEffect(() => {
+  // ─── Address DB helpers ──────────────────────────────────────
+
+  // Convert DB address record to CartContext Address format
+  // DB: firstName=fullName, phone=phoneNumber, street1=address, street2=zone, state=provinceRegion, company=landmark
+  const dbToCartAddress = (db: {
+    id: string;
+    firstName: string;
+    phone: string | null;
+    street1: string;
+    street2: string | null;
+    state: string;
+    company: string | null;
+    city: string;
+    isDefault: boolean;
+  }): Address => ({
+    id: db.id,
+    fullName: db.firstName,
+    phoneNumber: db.phone ?? '',
+    address: db.street1,
+    zone: db.street2 ?? '',
+    provinceRegion: db.state,
+    landmark: db.company ?? '',
+    city: db.city,
+    isDefault: db.isDefault,
+    type: 'home',
+  });
+
+  const fetchAddressesFromDB = useCallback(async () => {
     try {
-      const savedAddresses = localStorage.getItem('minsah_addresses');
-      if (savedAddresses) {
-        const parsed: Address[] = JSON.parse(savedAddresses);
-        setAddresses(parsed);
-        const def = parsed.find(a => a.isDefault) || parsed[0] || null;
-        setSelectedAddress(def);
-      }
-    } catch { /* ignore */ }
+      const res = await fetch('/api/addresses', { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const parsed: Address[] = (data.addresses ?? []).map(dbToCartAddress);
+      setAddresses(parsed);
+      const def = parsed.find(a => a.isDefault) || parsed[0] || null;
+      setSelectedAddress(def);
+      localStorage.setItem('minsah_addresses', JSON.stringify(parsed));
+    } catch {
+      try {
+        const saved = localStorage.getItem('minsah_addresses');
+        if (saved) {
+          const parsed: Address[] = JSON.parse(saved);
+          setAddresses(parsed);
+          const def = parsed.find(a => a.isDefault) || parsed[0] || null;
+          setSelectedAddress(def);
+        }
+      } catch { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Save addresses to localStorage on change
+  // Load addresses when user changes
   useEffect(() => {
-    localStorage.setItem('minsah_addresses', JSON.stringify(addresses));
-  }, [addresses]);
+    if (user) {
+      fetchAddressesFromDB();
+    } else {
+      try {
+        const savedAddresses = localStorage.getItem('minsah_addresses');
+        if (savedAddresses) {
+          const parsed: Address[] = JSON.parse(savedAddresses);
+          setAddresses(parsed);
+          const def = parsed.find(a => a.isDefault) || parsed[0] || null;
+          setSelectedAddress(def);
+        }
+      } catch { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Save guest addresses to localStorage (only when not logged in)
+  useEffect(() => {
+    if (!user) {
+      localStorage.setItem('minsah_addresses', JSON.stringify(addresses));
+    }
+  }, [addresses, user]);
 
   // ─── Cart functions ────────────────────────────────────────────
 
@@ -329,24 +387,95 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // ─── Address functions ─────────────────────────────────────────
 
-  const addAddress = (address: Omit<Address, 'id'>) => {
-    const newAddress: Address = { ...address, id: Date.now().toString() };
-    setAddresses(prev => [...prev, newAddress]);
-    if (address.isDefault) setSelectedAddress(newAddress);
-  };
-
-  const updateAddress = (id: string, updates: Partial<Address>) => {
-    setAddresses(prev => prev.map(addr =>
-      addr.id === id ? { ...addr, ...updates } : addr
-    ));
-  };
-
-  const deleteAddress = (id: string) => {
-    setAddresses(prev => prev.filter(addr => addr.id !== id));
-    if (selectedAddress?.id === id) {
-      setSelectedAddress(addresses[0] || null);
+  const addAddress = useCallback(async (address: Omit<Address, 'id'>) => {
+    if (user) {
+      try {
+        const res = await fetch('/api/addresses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            firstName: address.fullName,
+            phone: address.phoneNumber,
+            street1: address.address,
+            street2: address.zone,
+            state: address.provinceRegion,
+            company: address.landmark,
+            city: address.city,
+            isDefault: address.isDefault,
+            type: 'SHIPPING',
+          }),
+        });
+        if (res.ok) {
+          await fetchAddressesFromDB();
+        }
+      } catch {
+        // Fallback: add locally
+        const newAddress: Address = { ...address, id: Date.now().toString() };
+        setAddresses(prev => [...prev, newAddress]);
+        if (address.isDefault) setSelectedAddress(newAddress);
+      }
+    } else {
+      const newAddress: Address = { ...address, id: Date.now().toString() };
+      setAddresses(prev => [...prev, newAddress]);
+      if (address.isDefault) setSelectedAddress(newAddress);
     }
-  };
+  }, [user, fetchAddressesFromDB]);
+
+  const updateAddress = useCallback(async (id: string, updates: Partial<Address>) => {
+    if (user) {
+      try {
+        const patchBody: Record<string, unknown> = {};
+        if (updates.fullName !== undefined) patchBody.firstName = updates.fullName;
+        if (updates.phoneNumber !== undefined) patchBody.phone = updates.phoneNumber;
+        if (updates.address !== undefined) patchBody.street1 = updates.address;
+        if (updates.zone !== undefined) patchBody.street2 = updates.zone;
+        if (updates.provinceRegion !== undefined) patchBody.state = updates.provinceRegion;
+        if (updates.landmark !== undefined) patchBody.company = updates.landmark;
+        if (updates.city !== undefined) patchBody.city = updates.city;
+        if (updates.isDefault !== undefined) patchBody.isDefault = updates.isDefault;
+
+        await fetch(`/api/addresses/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(patchBody),
+        });
+        await fetchAddressesFromDB();
+      } catch {
+        setAddresses(prev => prev.map(addr =>
+          addr.id === id ? { ...addr, ...updates } : addr
+        ));
+      }
+    } else {
+      setAddresses(prev => prev.map(addr =>
+        addr.id === id ? { ...addr, ...updates } : addr
+      ));
+    }
+  }, [user, fetchAddressesFromDB]);
+
+  const deleteAddress = useCallback(async (id: string) => {
+    if (user) {
+      // Optimistic update
+      setAddresses(prev => prev.filter(addr => addr.id !== id));
+      if (selectedAddress?.id === id) {
+        setSelectedAddress(addresses.find(a => a.id !== id) || null);
+      }
+      try {
+        await fetch(`/api/addresses/${id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+      } catch {
+        await fetchAddressesFromDB();
+      }
+    } else {
+      setAddresses(prev => prev.filter(addr => addr.id !== id));
+      if (selectedAddress?.id === id) {
+        setSelectedAddress(addresses.find(a => a.id !== id) || null);
+      }
+    }
+  }, [user, addresses, selectedAddress, fetchAddressesFromDB]);
 
   return (
     <CartContext.Provider value={{

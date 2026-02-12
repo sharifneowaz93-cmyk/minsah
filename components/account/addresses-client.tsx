@@ -17,24 +17,53 @@ interface AddressesClientProps {
   initialAddresses: UserAddress[];
 }
 
+const BLANK_FORM: Partial<UserAddress> = {
+  type: 'shipping',
+  isDefault: false,
+  firstName: '',
+  lastName: '',
+  company: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  state: '',
+  postalCode: '',
+  country: 'Bangladesh',
+  phone: '',
+};
+
+// Map DB record to UserAddress format
+function dbToUserAddress(db: Record<string, unknown>): UserAddress {
+  return {
+    id: db.id as string,
+    type: (db.type as string).toLowerCase() as 'shipping' | 'billing',
+    isDefault: db.isDefault as boolean,
+    firstName: (db.firstName as string) ?? '',
+    lastName: (db.lastName as string) ?? '',
+    company: (db.company as string) ?? '',
+    addressLine1: (db.street1 as string) ?? '',
+    addressLine2: (db.street2 as string) ?? '',
+    city: (db.city as string) ?? '',
+    state: (db.state as string) ?? '',
+    postalCode: (db.postalCode as string) ?? '',
+    country: (db.country as string) ?? 'Bangladesh',
+    phone: (db.phone as string) ?? '',
+  };
+}
+
+async function refreshAddresses(): Promise<UserAddress[]> {
+  const res = await fetch('/api/addresses', { credentials: 'include' });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.addresses ?? []).map(dbToUserAddress);
+}
+
 export function AddressesClient({ initialAddresses }: AddressesClientProps) {
   const [addresses, setAddresses] = useState<UserAddress[]>(initialAddresses);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<UserAddress | null>(null);
-  const [formData, setFormData] = useState<Partial<UserAddress>>({
-    type: 'shipping',
-    isDefault: false,
-    firstName: '',
-    lastName: '',
-    company: '',
-    addressLine1: '',
-    addressLine2: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: 'United States',
-    phone: ''
-  });
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<Partial<UserAddress>>(BLANK_FORM);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -44,39 +73,49 @@ export function AddressesClient({ initialAddresses }: AddressesClientProps) {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
 
-    if (editingAddress) {
-      setAddresses(prev => prev.map(addr =>
-        addr.id === editingAddress.id
-          ? { ...formData, id: editingAddress.id } as UserAddress
-          : addr
-      ));
-    } else {
-      const newAddress: UserAddress = {
-        ...formData,
-        id: Date.now().toString()
-      } as UserAddress;
-      setAddresses(prev => [...prev, newAddress]);
-    }
+    const body = {
+      type: (formData.type ?? 'shipping').toUpperCase(),
+      isDefault: formData.isDefault ?? false,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      company: formData.company,
+      street1: formData.addressLine1,
+      street2: formData.addressLine2,
+      city: formData.city,
+      state: formData.state,
+      postalCode: formData.postalCode ?? '',
+      country: formData.country ?? 'Bangladesh',
+      phone: formData.phone,
+    };
 
-    setFormData({
-      type: 'shipping',
-      isDefault: false,
-      firstName: '',
-      lastName: '',
-      company: '',
-      addressLine1: '',
-      addressLine2: '',
-      city: '',
-      state: '',
-      postalCode: '',
-      country: 'United States',
-      phone: ''
-    });
+    try {
+      if (editingAddress) {
+        await fetch(`/api/addresses/${editingAddress.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        });
+      } else {
+        await fetch('/api/addresses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        });
+      }
+      const updated = await refreshAddresses();
+      setAddresses(updated);
+    } catch { /* ignore */ }
+
+    setFormData(BLANK_FORM);
     setShowAddForm(false);
     setEditingAddress(null);
+    setSaving(false);
   };
 
   const handleEdit = (address: UserAddress) => {
@@ -85,17 +124,37 @@ export function AddressesClient({ initialAddresses }: AddressesClientProps) {
     setShowAddForm(true);
   };
 
-  const handleDelete = (addressId: string) => {
-    if (confirm('Are you sure you want to delete this address?')) {
-      setAddresses(prev => prev.filter(addr => addr.id !== addressId));
+  const handleDelete = async (addressId: string) => {
+    if (!confirm('Are you sure you want to delete this address?')) return;
+    setAddresses(prev => prev.filter(addr => addr.id !== addressId));
+    try {
+      await fetch(`/api/addresses/${addressId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+    } catch {
+      const updated = await refreshAddresses();
+      setAddresses(updated);
     }
   };
 
-  const handleSetDefault = (addressId: string, type: 'shipping' | 'billing') => {
+  const handleSetDefault = async (addressId: string, type: 'shipping' | 'billing') => {
+    // Optimistic update
     setAddresses(prev => prev.map(addr => ({
       ...addr,
-      isDefault: addr.id === addressId && addr.type === type
+      isDefault: addr.id === addressId && addr.type === type,
     })));
+    try {
+      await fetch(`/api/addresses/${addressId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ isDefault: true, type: type.toUpperCase() }),
+      });
+    } catch {
+      const updated = await refreshAddresses();
+      setAddresses(updated);
+    }
   };
 
   const handleCancel = () => {
@@ -371,9 +430,10 @@ export function AddressesClient({ initialAddresses }: AddressesClientProps) {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                  disabled={saving}
+                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-60"
                 >
-                  {editingAddress ? 'Update Address' : 'Add Address'}
+                  {saving ? 'Saving...' : editingAddress ? 'Update Address' : 'Add Address'}
                 </button>
               </div>
             </form>

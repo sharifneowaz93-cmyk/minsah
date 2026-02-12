@@ -53,14 +53,15 @@ model User {
   lastLoginAt     DateTime?
 
   // Relations
-  accounts        Account[]
-  sessions        Session[]
-  addresses       Address[]
-  orders          Order[]
-  cartItems       CartItem[]
-  wishlistItems   WishlistItem[]
-  reviews         Review[]
-  refreshTokens   RefreshToken[]
+  accounts          Account[]
+  sessions          Session[]
+  addresses         Address[]
+  orders            Order[]
+  cartItems         CartItem[]
+  wishlistItems     WishlistItem[]
+  reviews           Review[]
+  refreshTokens     RefreshToken[]
+  customerBehavior  CustomerBehavior?
 
   @@index([email])
   @@index([referralCode])
@@ -505,6 +506,24 @@ model SiteConfig {
   updatedAt DateTime @updatedAt
 
   @@index([key])
+}
+
+// ==========================================
+// Customer Behavior Analytics
+// ==========================================
+
+model CustomerBehavior {
+  id        String   @id @default(cuid())
+  userId    String?  @unique
+  deviceId  String   @unique
+  data      Json     // Full CustomerBehavior object
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([deviceId])
 }
 
 // ==========================================

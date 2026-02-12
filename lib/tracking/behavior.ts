@@ -44,6 +44,9 @@ export interface CustomerBehavior {
 
 export class BehaviorTracker {
   private static STORAGE_KEY = 'customer_behavior';
+  // Debounce timer for background DB sync (non-critical events)
+  private static syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private static SYNC_DELAY_MS = 5000;
 
   /**
    * Get current customer behavior data
@@ -166,15 +169,95 @@ export class BehaviorTracker {
       }
     }
 
-    this.saveBehavior(behavior);
+    // Sync immediately to DB for high-value events, otherwise debounce
+    const criticalEvent = event === 'Purchase' || event === 'CompleteRegistration';
+    this.saveBehavior(behavior, criticalEvent);
   }
 
   /**
-   * Save behavior to storage
+   * Save behavior to localStorage + trigger debounced DB sync
    */
-  private static saveBehavior(behavior: CustomerBehavior): void {
+  private static saveBehavior(behavior: CustomerBehavior, immediate = false): void {
     if (typeof window === 'undefined') return;
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(behavior));
+
+    if (immediate) {
+      // Fire-and-forget for critical events (Purchase, Registration)
+      this.syncToDB(behavior);
+    } else {
+      // Debounced sync for frequent events (PageView, AddToCart, etc.)
+      if (this.syncTimer) clearTimeout(this.syncTimer);
+      this.syncTimer = setTimeout(() => {
+        this.syncToDB(behavior);
+      }, this.SYNC_DELAY_MS);
+    }
+  }
+
+  /**
+   * Persist behavior data to database (async, fire-and-forget)
+   */
+  static async syncToDB(behavior?: CustomerBehavior): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const data = behavior ?? this.getBehavior();
+    if (!data?.deviceId) return;
+
+    try {
+      await fetch('/api/behavior', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ deviceId: data.deviceId, data }),
+      });
+    } catch {
+      // Silently fail — localStorage still has the data
+    }
+  }
+
+  /**
+   * Load behavior from DB and merge into localStorage
+   * Call this on user login or page init
+   */
+  static async loadFromDB(deviceId: string): Promise<CustomerBehavior | null> {
+    if (typeof window === 'undefined') return null;
+
+    try {
+      const res = await fetch(`/api/behavior?deviceId=${encodeURIComponent(deviceId)}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) return null;
+
+      const { behavior: dbData } = await res.json();
+      if (!dbData) return null;
+
+      const dbBehavior = dbData as CustomerBehavior;
+      const localBehavior = this.getBehavior();
+
+      // Merge: take higher values from each source
+      if (localBehavior) {
+        const merged: CustomerBehavior = {
+          ...dbBehavior,
+          sessions: Math.max(dbBehavior.sessions, localBehavior.sessions),
+          totalPageViews: Math.max(dbBehavior.totalPageViews, localBehavior.totalPageViews),
+          addToCartCount: Math.max(dbBehavior.addToCartCount, localBehavior.addToCartCount),
+          wishlistCount: Math.max(dbBehavior.wishlistCount, localBehavior.wishlistCount),
+          purchaseCount: Math.max(dbBehavior.purchaseCount, localBehavior.purchaseCount),
+          totalRevenue: Math.max(dbBehavior.totalRevenue, localBehavior.totalRevenue),
+          productsViewed: [...new Set([...dbBehavior.productsViewed, ...localBehavior.productsViewed])],
+          categoriesViewed: [...new Set([...dbBehavior.categoriesViewed, ...localBehavior.categoriesViewed])],
+          blogPostsRead: [...new Set([...dbBehavior.blogPostsRead, ...localBehavior.blogPostsRead])],
+          searchQueries: [...new Set([...dbBehavior.searchQueries, ...localBehavior.searchQueries])],
+          firstVisit: Math.min(dbBehavior.firstVisit, localBehavior.firstVisit),
+          lastVisit: Math.max(dbBehavior.lastVisit, localBehavior.lastVisit),
+        };
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(merged));
+        return merged;
+      }
+
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(dbBehavior));
+      return dbBehavior;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -358,10 +441,11 @@ export class BehaviorTracker {
   }
 
   /**
-   * Clear behavior data
+   * Clear behavior data from localStorage (and optionally DB)
    */
   static clearBehavior(): void {
     if (typeof window === 'undefined') return;
+    if (this.syncTimer) clearTimeout(this.syncTimer);
     localStorage.removeItem(this.STORAGE_KEY);
   }
 }
