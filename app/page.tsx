@@ -23,13 +23,18 @@ const brands = [
   { name: 'Chanel', logo: 'CHANEL' },
 ];
 
-const categories = [
-  { name: 'Makeup', icon: '💄', color: 'bg-pink-100' },
-  { name: 'Skincare', icon: '🧴', color: 'bg-blue-100' },
-  { name: 'Hair Care', icon: '💆‍♀️', color: 'bg-purple-100' },
-  { name: 'Fragrance', icon: '🌸', color: 'bg-yellow-100' },
-  { name: 'Tools', icon: '🖌️', color: 'bg-green-100' },
+const CATEGORY_COLORS = [
+  'bg-pink-100',
+  'bg-blue-100',
+  'bg-purple-100',
+  'bg-yellow-100',
+  'bg-green-100',
+  'bg-orange-100',
+  'bg-red-100',
+  'bg-teal-100',
 ];
+
+const DEFAULT_CATEGORY_ICON = '🏷️';
 
 
 const comboSlides = [
@@ -61,6 +66,7 @@ export default function HomePage() {
   const [currentComboSlide, setCurrentComboSlide] = useState(0);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 7, minutes: 33, seconds: 28 });
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [categories, setCategories] = useState<{ id: string; name: string; slug: string; icon: string; color: string }[]>([]);
 
   const handleAddToCart = (
     e: React.MouseEvent,
@@ -133,6 +139,27 @@ export default function HomePage() {
     [activeProducts]
   );
 
+  // Fetch categories from API
+  useEffect(() => {
+    fetch('/api/categories?activeOnly=true')
+      .then(res => res.json())
+      .then(data => {
+        if (data.categories) {
+          const mapped = data.categories.map((cat: { id: string; name: string; slug: string; icon?: string }, index: number) => ({
+            id: cat.id,
+            name: cat.name,
+            slug: cat.slug,
+            icon: cat.icon || DEFAULT_CATEGORY_ICON,
+            color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+          }));
+          setCategories(mapped);
+        }
+      })
+      .catch(() => {
+        // keep empty array on error
+      });
+  }, []);
+
   // Countdown timer
   useEffect(() => {
     const timer = setInterval(() => {
@@ -202,8 +229,8 @@ export default function HomePage() {
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
           {categories.map((category) => (
             <Link
-              key={category.name}
-              href={`/categories/${category.name.toLowerCase().replace(' ', '-')}`}
+              key={category.id ?? category.name}
+              href={`/categories/${category.slug ?? category.name.toLowerCase().replace(/\s+/g, '-')}`}
               className="flex flex-col items-center gap-2 flex-shrink-0"
             >
               <div className={`w-16 h-16 ${category.color} rounded-full flex items-center justify-center text-3xl`}>
