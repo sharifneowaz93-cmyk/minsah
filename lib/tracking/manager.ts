@@ -132,6 +132,40 @@ class TrackingManager {
     localStorage.setItem('last_touch_utm', JSON.stringify(this.sessionData.utmParams));
 
     this.initialized = true;
+
+    // Async DB sync — fire-and-forget, no UI blocking
+    this.syncSessionToDB(deviceId, this.sessionData.utmParams);
+  }
+
+  /**
+   * Sync device ID and UTM params to database
+   */
+  private async syncSessionToDB(
+    deviceId: string,
+    utmParams: CustomerSession['utmParams']
+  ): Promise<void> {
+    if (typeof window === 'undefined') return;
+
+    const hasUtmSource = !!utmParams?.source;
+    const payload: Record<string, unknown> = { deviceId };
+
+    if (hasUtmSource) {
+      // Only send firstTouchUtm when there's actually a UTM source
+      payload.firstTouchUtm = utmParams;
+    }
+    // Always update lastTouchUtm
+    payload.lastTouchUtm = utmParams;
+
+    try {
+      await fetch('/api/tracking-device', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Silently fail — localStorage still has the data
+    }
   }
 
   /**
@@ -494,8 +528,47 @@ class TrackingManager {
     if (!deviceId) {
       deviceId = `device-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       localStorage.setItem('device_id', deviceId);
+      // Register new device in DB (fire-and-forget)
+      fetch('/api/tracking-device', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ deviceId }),
+      }).catch(() => {
+        // Silently fail — localStorage still has the deviceId
+      });
     }
     return deviceId;
+  }
+
+  /**
+   * Restore UTM data from DB into localStorage
+   * Call this on user login to recover cross-device UTM history
+   */
+  async restoreFromDB(): Promise<void> {
+    if (typeof window === 'undefined') return;
+
+    const deviceId = localStorage.getItem('device_id');
+    if (!deviceId) return;
+
+    try {
+      const res = await fetch(
+        `/api/tracking-device?deviceId=${encodeURIComponent(deviceId)}`,
+        { credentials: 'include' }
+      );
+      if (!res.ok) return;
+
+      const { firstTouchUtm, lastTouchUtm } = await res.json();
+
+      if (firstTouchUtm && !localStorage.getItem('first_touch_utm')) {
+        localStorage.setItem('first_touch_utm', JSON.stringify(firstTouchUtm));
+      }
+      if (lastTouchUtm) {
+        localStorage.setItem('last_touch_utm', JSON.stringify(lastTouchUtm));
+      }
+    } catch {
+      // Silently fall back to localStorage
+    }
   }
 
   private getDeviceType(): 'mobile' | 'tablet' | 'desktop' {
