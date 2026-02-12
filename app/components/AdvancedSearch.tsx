@@ -107,19 +107,42 @@ export default function AdvancedSearch({
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
 
-  // Load search history from localStorage
+  // Load search history — DB first, localStorage as fallback
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return;
+
+    const deviceId = localStorage.getItem('device_id');
+
+    const loadHistory = async () => {
+      // Always load localStorage immediately for instant render
       try {
-        const savedHistory = localStorage.getItem('searchHistory');
-        if (savedHistory) {
-          const parsed = JSON.parse(savedHistory);
-          setSearchState(prev => ({ ...prev, history: parsed }));
+        const local = localStorage.getItem('searchHistory');
+        if (local) {
+          setSearchState(prev => ({ ...prev, history: JSON.parse(local) }));
         }
-      } catch (error) {
-        console.error('Failed to load search history:', error);
+      } catch {
+        // ignore
       }
-    }
+
+      // Then try DB (may have richer history from other devices)
+      if (!deviceId) return;
+      try {
+        const res = await fetch(
+          `/api/search-history?deviceId=${encodeURIComponent(deviceId)}`,
+          { credentials: 'include' }
+        );
+        if (!res.ok) return;
+        const { items } = await res.json();
+        if (Array.isArray(items) && items.length > 0) {
+          setSearchState(prev => ({ ...prev, history: items }));
+          localStorage.setItem('searchHistory', JSON.stringify(items));
+        }
+      } catch {
+        // silently fall back to localStorage
+      }
+    };
+
+    loadHistory();
   }, []);
 
   // Update URL with search parameters
@@ -135,7 +158,7 @@ export default function AdvancedSearch({
     router.push(url, { scroll: false });
   }, [router]);
 
-  // Save search to history
+  // Save search to history — localStorage + async DB sync
   const saveToHistory = useCallback((term: string, resultCount: number) => {
     try {
       const newHistory: SearchHistory[] = [
@@ -145,16 +168,42 @@ export default function AdvancedSearch({
 
       setSearchState(prev => ({ ...prev, history: newHistory }));
       localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+
+      // Async sync to DB (fire-and-forget)
+      const deviceId = localStorage.getItem('device_id');
+      if (deviceId) {
+        fetch('/api/search-history', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ deviceId, items: newHistory }),
+        }).catch(() => {
+          // Silently fail — localStorage still has the data
+        });
+      }
     } catch (error) {
       console.error('Failed to save search history:', error);
     }
   }, [searchState.history, historyLimit]);
 
-  // Clear search history
+  // Clear search history — localStorage + async DB sync
   const clearHistory = useCallback(() => {
     try {
       setSearchState(prev => ({ ...prev, history: [] }));
       localStorage.removeItem('searchHistory');
+
+      // Async clear in DB (fire-and-forget)
+      const deviceId = localStorage.getItem('device_id');
+      if (deviceId) {
+        fetch('/api/search-history', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ deviceId }),
+        }).catch(() => {
+          // Silently fail
+        });
+      }
     } catch (error) {
       console.error('Failed to clear search history:', error);
     }
