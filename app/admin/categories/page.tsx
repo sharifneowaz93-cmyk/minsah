@@ -129,35 +129,40 @@ export default function CategoriesPage() {
   };
 
   const handleSaveCategory = async () => {
-  if (!formData.name.trim()) {
-    alert('Please enter a category name');
-    return;
-  }
-
-  try {
-    const res = await fetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: formData.name,
-        status: formData.status,
-        subcategories: formData.subcategories,
-      }),
-    });
-
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Failed to save category');
+    if (!formData.name.trim()) {
+      alert('Please enter a category name');
+      return;
     }
 
-    await refreshCategories();
-    closeModal();
-    alert('Category saved successfully!');
-  } catch (error) {
-    console.error('Error saving category:', error);
-    alert(error instanceof Error ? error.message : 'Failed to save category');
-  }
-};
+    try {
+      const url = editingCategoryId
+        ? `/api/categories/${editingCategoryId}`
+        : '/api/categories';
+      const method = editingCategoryId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          status: formData.status,
+          subcategories: formData.subcategories,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to save category');
+      }
+
+      await refreshCategories();
+      closeModal();
+      alert('Category saved successfully!');
+    } catch (error) {
+      console.error('Error saving category:', error);
+      alert(error instanceof Error ? error.message : 'Failed to save category');
+    }
+  };
 
   const filteredCategories = categories.filter(category =>
     category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
