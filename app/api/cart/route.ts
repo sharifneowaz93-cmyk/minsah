@@ -65,7 +65,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { productId, quantity = 1 } = body as { productId: string; quantity?: number };
+    const { productId, variantId, quantity = 1 } = body as {
+      productId: string;
+      variantId?: string;
+      quantity?: number;
+    };
 
     if (!productId) {
       return NextResponse.json({ error: 'productId is required' }, { status: 400 });
@@ -80,9 +84,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    // Upsert: if item exists increment, otherwise create
-    const existing = await prisma.cartItem.findUnique({
-      where: { userId_productId_variantId: { userId, productId, variantId: null } },
+    // findFirst handles nullable variantId — findUnique cannot accept null in composite keys
+    const existing = await prisma.cartItem.findFirst({
+      where: { userId, productId, variantId: variantId ?? null },
     });
 
     let cartItem;
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       cartItem = await prisma.cartItem.create({
-        data: { userId, productId, quantity },
+        data: { userId, productId, quantity, variantId: variantId ?? null },
       });
     }
 
