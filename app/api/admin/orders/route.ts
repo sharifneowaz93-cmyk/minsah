@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { verifyAdminAccessToken } from '@/lib/auth/jwt';
+import { Prisma, $Enums } from '@/generated/prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,13 +45,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Build where clause
-    const where: Record<string, unknown> = {};
+    const where: Prisma.OrderWhereInput = {};
 
     if (status) {
-      where.status = status.toUpperCase();
+      const upperStatus = status.toUpperCase() as $Enums.OrderStatus;
+      if (Object.values($Enums.OrderStatus).includes(upperStatus)) {
+        where.status = upperStatus;
+      }
     }
     if (paymentStatus) {
-      where.paymentStatus = paymentStatus.toUpperCase();
+      const upperPayment = paymentStatus.toUpperCase() as $Enums.PaymentStatus;
+      if (Object.values($Enums.PaymentStatus).includes(upperPayment)) {
+        where.paymentStatus = upperPayment;
+      }
     }
     if (Object.keys(dateFilter).length > 0) {
       where.createdAt = dateFilter;
@@ -65,11 +72,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Build orderBy
-    let orderBy: Record<string, string> = { createdAt: 'desc' };
+    let orderBy: Prisma.OrderOrderByWithRelationInput = { createdAt: 'desc' };
     if (sortBy === 'updated') orderBy = { updatedAt: 'desc' };
     else if (sortBy === 'total_high') orderBy = { total: 'desc' };
     else if (sortBy === 'total_low') orderBy = { total: 'asc' };
-    else if (sortBy === 'customer') orderBy = { user: { firstName: 'asc' } } as Record<string, string>;
+    else if (sortBy === 'customer') orderBy = { user: { firstName: 'asc' } };
 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
@@ -141,10 +148,10 @@ export async function GET(request: NextRequest) {
 
     // Stats
     const [pendingCount, processingCount, shippedCount, totalRevenue] = await Promise.all([
-      prisma.order.count({ where: { status: 'PENDING' } }),
-      prisma.order.count({ where: { status: 'PROCESSING' } }),
-      prisma.order.count({ where: { status: 'SHIPPED' } }),
-      prisma.order.aggregate({ _sum: { total: true }, where: { paymentStatus: 'COMPLETED' } }),
+      prisma.order.count({ where: { status: $Enums.OrderStatus.PENDING } }),
+      prisma.order.count({ where: { status: $Enums.OrderStatus.PROCESSING } }),
+      prisma.order.count({ where: { status: $Enums.OrderStatus.SHIPPED } }),
+      prisma.order.aggregate({ _sum: { total: true }, where: { paymentStatus: $Enums.PaymentStatus.COMPLETED } }),
     ]);
 
     return NextResponse.json({
