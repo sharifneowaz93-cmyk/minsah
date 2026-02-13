@@ -10,6 +10,7 @@ import { EncodingProvider } from "./encoding-provider";
 import { FacebookPixel } from "@/lib/facebook/pixel";
 import AllPixels from "@/lib/tracking/pixels/AllPixels";
 import { TrackingProvider } from "@/contexts/TrackingContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { ProductsProvider } from "@/contexts/ProductsContext";
 
@@ -56,6 +57,7 @@ export default function RootLayout({
         <FacebookPixel />
         <AllPixels />
         <TrackingProvider>
+          <AuthProvider>
           <ProductsProvider>
             <CartProvider>
               {/* <EncodingProvider> */}
@@ -64,6 +66,7 @@ export default function RootLayout({
               {/* </EncodingProvider> */}
             </CartProvider>
           </ProductsProvider>
+          </AuthProvider>
         </TrackingProvider>
       </body>
     </html>
