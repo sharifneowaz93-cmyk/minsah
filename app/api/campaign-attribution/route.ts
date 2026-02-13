@@ -47,10 +47,13 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // No `| null` — the API never intentionally clears UTM data.
+    // Absent fields (undefined) simply mean "don't update this field".
     const { deviceId, lastTouch, touchpoints, firstTouch: incomingFirstTouch } = body as {
       deviceId: string;
-      firstTouch?: Prisma.InputJsonValue | null;
-      lastTouch?: Prisma.InputJsonValue | null;
+      firstTouch?: Prisma.InputJsonValue;
+      lastTouch?: Prisma.InputJsonValue;
       touchpoints?: Prisma.InputJsonValue[];
     };
 
@@ -63,8 +66,11 @@ export async function PUT(request: NextRequest) {
     // Check if record already exists to preserve firstTouch
     const existing = await prisma.campaignAttribution.findUnique({ where: { deviceId } });
 
+    // Build update payload using the unchecked variant (scalar userId, no relation object)
     const updateData: Prisma.CampaignAttributionUncheckedUpdateInput = {};
-    if (incomingFirstTouch && !existing?.firstTouch) {
+
+    // firstTouch: server-side "never overwrite" — only set on first occurrence
+    if (incomingFirstTouch !== undefined && !existing?.firstTouch) {
       updateData.firstTouch = incomingFirstTouch;
     }
     if (lastTouch !== undefined) {
@@ -82,8 +88,8 @@ export async function PUT(request: NextRequest) {
       create: {
         deviceId,
         userId: userId ?? null,
-        firstTouch: incomingFirstTouch ?? undefined,
-        lastTouch: lastTouch ?? undefined,
+        ...(incomingFirstTouch !== undefined && { firstTouch: incomingFirstTouch }),
+        ...(lastTouch !== undefined && { lastTouch }),
         touchpoints: touchpoints ?? [],
       },
       update: updateData,
