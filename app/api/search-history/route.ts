@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { deviceId, items } = body as { deviceId: string; items: unknown[] };
+    const { deviceId, items } = body as { deviceId: string; items: Prisma.InputJsonValue[] };
 
     if (!deviceId || !Array.isArray(items)) {
       return NextResponse.json({ error: 'deviceId and items array required' }, { status: 400 });
