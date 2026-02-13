@@ -58,14 +58,14 @@ export default function RootLayout({
         <AllPixels />
         <TrackingProvider>
           <AuthProvider>
-          <ProductsProvider>
-            <CartProvider>
-              {/* <EncodingProvider> */}
-                {children}
-                <SocialFloatingButtons />
-              {/* </EncodingProvider> */}
-            </CartProvider>
-          </ProductsProvider>
+            <ProductsProvider>
+              <CartProvider>
+                {/* <EncodingProvider> */}
+                  {children}
+                  <SocialFloatingButtons />
+                {/* </EncodingProvider> */}
+              </CartProvider>
+            </ProductsProvider>
           </AuthProvider>
         </TrackingProvider>
       </body>
