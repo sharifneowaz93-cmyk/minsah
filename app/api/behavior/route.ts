@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
+import type { Prisma } from '@/generated/prisma/client';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 
 async function getUserId(request: NextRequest): Promise<string | null> {
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { deviceId, data } = body as { deviceId: string; data: Record<string, unknown> };
+    const { deviceId, data } = body as { deviceId: string; data: Prisma.InputJsonValue };
 
     if (!deviceId || !data) {
       return NextResponse.json({ error: 'deviceId and data are required' }, { status: 400 });
