@@ -63,6 +63,20 @@ export async function PUT(request: NextRequest) {
     // Check if record already exists to preserve firstTouch
     const existing = await prisma.campaignAttribution.findUnique({ where: { deviceId } });
 
+    const updateData: Prisma.CampaignAttributionUncheckedUpdateInput = {};
+    if (incomingFirstTouch && !existing?.firstTouch) {
+      updateData.firstTouch = incomingFirstTouch;
+    }
+    if (lastTouch !== undefined) {
+      updateData.lastTouch = lastTouch;
+    }
+    if (touchpoints !== undefined) {
+      updateData.touchpoints = touchpoints;
+    }
+    if (userId) {
+      updateData.userId = userId;
+    }
+
     await prisma.campaignAttribution.upsert({
       where: { deviceId },
       create: {
@@ -72,15 +86,7 @@ export async function PUT(request: NextRequest) {
         lastTouch: lastTouch ?? undefined,
         touchpoints: touchpoints ?? [],
       },
-      update: {
-        // firstTouch: only set if not already stored (server-side "never overwrite" protection)
-        ...(incomingFirstTouch && !existing?.firstTouch
-          ? { firstTouch: incomingFirstTouch }
-          : {}),
-        ...(lastTouch !== undefined ? { lastTouch } : {}),
-        ...(touchpoints !== undefined ? { touchpoints } : {}),
-        ...(userId && { userId }),
-      },
+      update: updateData,
     });
 
     return NextResponse.json({ ok: true });

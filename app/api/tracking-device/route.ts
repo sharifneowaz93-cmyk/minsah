@@ -60,6 +60,17 @@ export async function PUT(request: NextRequest) {
     const userId = await getUserId(request);
     const existing = await prisma.trackingDevice.findUnique({ where: { deviceId } });
 
+    const updateData: Prisma.TrackingDeviceUncheckedUpdateInput = {};
+    if (firstTouchUtm && !existing?.firstTouchUtm) {
+      updateData.firstTouchUtm = firstTouchUtm;
+    }
+    if (lastTouchUtm !== undefined) {
+      updateData.lastTouchUtm = lastTouchUtm;
+    }
+    if (userId) {
+      updateData.userId = userId;
+    }
+
     await prisma.trackingDevice.upsert({
       where: { deviceId },
       create: {
@@ -68,14 +79,7 @@ export async function PUT(request: NextRequest) {
         firstTouchUtm: firstTouchUtm ?? undefined,
         lastTouchUtm: lastTouchUtm ?? undefined,
       },
-      update: {
-        // firstTouchUtm: never overwrite once set (first-touch protection)
-        ...(firstTouchUtm && !existing?.firstTouchUtm
-          ? { firstTouchUtm }
-          : {}),
-        ...(lastTouchUtm !== undefined ? { lastTouchUtm } : {}),
-        ...(userId && { userId }),
-      },
+      update: updateData,
     });
 
     return NextResponse.json({ ok: true });
