@@ -21,6 +21,7 @@ export default function CheckoutPage() {
   } = useCart();
 
   const [expandedSection, setExpandedSection] = useState<'address' | 'payment' | 'summary' | null>('address');
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   const bdtSubtotal = convertUSDtoBDT(subtotal);
   const bdtShipping = convertUSDtoBDT(shippingCost);
@@ -37,8 +38,43 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Simulate order processing
-    router.push('/checkout/order-confirmed');
+    setIsPlacingOrder(true);
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          items: items.map((item) => ({
+            productId: item.id,
+            name: item.name,
+            sku: item.sku || '',
+            price: item.price,
+            quantity: item.quantity,
+          })),
+          addressId: selectedAddress.id,
+          paymentMethod: selectedPaymentMethod.type,
+          subtotal,
+          shippingCost,
+          taxAmount: tax,
+          discountAmount: 0,
+          total,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to place order. Please try again.');
+        return;
+      }
+
+      router.push(data.redirectURL || '/checkout/order-confirmed');
+    } catch {
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
   const toggleSection = (section: 'address' | 'payment' | 'summary') => {
@@ -284,15 +320,24 @@ export default function CheckoutPage() {
       <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-4 bg-gradient-to-t from-minsah-light via-minsah-light to-transparent">
         <button
           onClick={handlePlaceOrder}
-          disabled={!selectedAddress || !selectedPaymentMethod}
+          disabled={!selectedAddress || !selectedPaymentMethod || isPlacingOrder}
           className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg transition flex items-center justify-center gap-2 ${
-            selectedAddress && selectedPaymentMethod
+            selectedAddress && selectedPaymentMethod && !isPlacingOrder
               ? 'bg-minsah-primary text-minsah-light hover:bg-minsah-dark'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
-          <span>Place Order</span>
-          <span className="text-xl">🔒</span>
+          {isPlacingOrder ? (
+            <>
+              <span className="animate-spin">⏳</span>
+              <span>Placing Order...</span>
+            </>
+          ) : (
+            <>
+              <span>Place Order</span>
+              <span className="text-xl">🔒</span>
+            </>
+          )}
         </button>
       </div>
     </div>
