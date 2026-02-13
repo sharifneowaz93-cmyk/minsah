@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { verifyAccessToken } from '@/lib/auth/jwt';
 
@@ -48,8 +49,8 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { deviceId, firstTouchUtm, lastTouchUtm } = body as {
       deviceId: string;
-      firstTouchUtm?: Record<string, unknown> | null;
-      lastTouchUtm?: Record<string, unknown> | null;
+      firstTouchUtm?: Prisma.InputJsonValue | null;
+      lastTouchUtm?: Prisma.InputJsonValue | null;
     };
 
     if (!deviceId) {
