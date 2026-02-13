@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { verifyAdminAccessToken } from '@/lib/auth/jwt';
+import { Prisma } from '@/generated/prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,10 +21,10 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
 
-    const where: Record<string, unknown> = {};
+    const where: Prisma.ReturnWhereInput = {};
 
     if (status && status !== 'all') {
-      where.status = status.toUpperCase();
+      where.status = status.toUpperCase() as Prisma.ReturnWhereInput['status'];
     }
 
     if (search) {
@@ -36,24 +37,30 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const returns = await prisma.return.findMany({
-      where,
-      orderBy: { requestDate: 'desc' },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+    const [returns, totalCount, pendingCount, approvedCount, totalRefund] = await Promise.all([
+      prisma.return.findMany({
+        where,
+        orderBy: { requestDate: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
           },
+          order: {
+            select: { orderNumber: true },
+          },
+          items: true,
         },
-        order: {
-          select: { orderNumber: true },
-        },
-        items: true,
-      },
-    });
+      }),
+      prisma.return.count(),
+      prisma.return.count({ where: { status: 'PENDING' } }),
+      prisma.return.count({ where: { status: 'APPROVED' } }),
+      prisma.return.aggregate({ _sum: { refundAmount: true } }),
+    ]);
 
     const formatted = returns.map((ret) => ({
       id: ret.returnNumber,
@@ -75,14 +82,6 @@ export async function GET(request: NextRequest) {
       notes: ret.adminNote || undefined,
       images: ret.images,
     }));
-
-    // Stats
-    const [totalCount, pendingCount, approvedCount, totalRefund] = await Promise.all([
-      prisma.return.count(),
-      prisma.return.count({ where: { status: 'PENDING' } }),
-      prisma.return.count({ where: { status: 'APPROVED' } }),
-      prisma.return.aggregate({ _sum: { refundAmount: true } }),
-    ]);
 
     return NextResponse.json({
       returns: formatted,
