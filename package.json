@@ -20,12 +20,16 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "gemini": "node gemini-cli.js",
-    "gemini:interactive": "node gemini-cli.js --interactive"
+    "gemini:interactive": "node gemini-cli.js --interactive",
+     "elasticsearch:init": "tsx scripts/init-elasticsearch.ts",
+    "elasticsearch:reindex": "tsx scripts/reindex-elasticsearch.ts",
+    "elasticsearch:test": "tsx scripts/test-elasticsearch.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^9.3.1",
     "@google/generative-ai": "^0.24.1",
     "@headlessui/react": "^2.2.9",
     "@prisma/adapter-pg": "^7.3.0",

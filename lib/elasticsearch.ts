@@ -1,150 +1,146 @@
 import { Client } from '@elastic/elasticsearch';
 
-let esClient: Client | null = null;
+// Elasticsearch client configuration
+export const esClient = new Client({
+  node: process.env.ELASTICSEARCH_URL || 'http://elasticsearch:9200',
+  auth: {
+    username: 'elastic',
+    password: process.env.ELASTIC_PASSWORD || '',
+  },
+  // For development without SSL
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
 
-export function getElasticsearchClient(): Client {
-  if (!esClient) {
-    // Use Docker internal network name
-    const node = process.env.ELASTICSEARCH_URL || 'http://minsah-elasticsearch:9200';
-    const password = process.env.ELASTICSEARCH_PASSWORD;
-
-    if (!password) {
-      throw new Error('ELASTICSEARCH_PASSWORD is not set');
-    }
-
-    esClient = new Client({
-      node,
-      auth: {
-        username: 'elastic',
-        password
-      },
-      maxRetries: 3,
-      requestTimeout: 30000
-    });
-
-    // Test connection
-    esClient.ping()
-      .then(() => console.log('✅ Elasticsearch connected'))
-      .catch(err => console.error('❌ Elasticsearch connection failed:', err.message));
+// Test connection
+export async function testConnection() {
+  try {
+    const health = await esClient.cluster.health();
+    console.log('✅ Elasticsearch connected:', health.status);
+    return true;
+  } catch (error) {
+    console.error('❌ Elasticsearch connection failed:', error);
+    return false;
   }
-
-  return esClient;
 }
 
-// Search products
-export async function searchProducts(query: string, page = 1, limit = 20) {
-  const client = getElasticsearchClient();
+// Index name
+export const PRODUCT_INDEX = 'products';
 
-  try {
-    const result = await client.search({
-      index: 'products',
-      from: (page - 1) * limit,
-      size: limit,
-      body: {
-        query: {
-          multi_match: {
-            query,
-            fields: ['name^3', 'description', 'brand^2', 'category', 'tags'],
-            fuzziness: 'AUTO'
-          }
+// Product index mapping with optimized settings
+export const productIndexMapping = {
+  settings: {
+    number_of_shards: 1,
+    number_of_replicas: 0,
+    analysis: {
+      analyzer: {
+        autocomplete: {
+          type: 'custom',
+          tokenizer: 'standard',
+          filter: ['lowercase', 'autocomplete_filter']
         },
-        sort: [
-          { _score: 'desc' },
-          { rating: 'desc' }
-        ]
+        autocomplete_search: {
+          type: 'custom',
+          tokenizer: 'standard',
+          filter: ['lowercase']
+        }
+      },
+      filter: {
+        autocomplete_filter: {
+          type: 'edge_ngram',
+          min_gram: 2,
+          max_gram: 20
+        }
       }
-    });
-
-    return {
-      products: result.hits.hits.map((hit: any) => hit._source),
-      total: result.hits.total.value,
-      page,
-      hasMore: result.hits.total.value > page * limit
-    };
-  } catch (error: any) {
-    console.error('Search error:', error.message);
-    return { products: [], total: 0, page, hasMore: false };
-  }
-}
-
-// Index a product
-export async function indexProduct(product: any) {
-  const client = getElasticsearchClient();
-
-  try {
-    await client.index({
-      index: 'products',
-      id: product.id,
-      document: {
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        category: product.category,
-        brand: product.brand,
-        price: product.price,
-        inStock: product.inStock,
-        image: product.image,
-        tags: product.tags,
-        rating: product.rating,
-        createdAt: product.createdAt
-      }
-    });
-
-    console.log(`✅ Indexed product: ${product.name}`);
-  } catch (error: any) {
-    console.error(`❌ Failed to index product:`, error.message);
-  }
-}
-
-// Bulk index products
-export async function bulkIndexProducts(products: any[]) {
-  const client = getElasticsearchClient();
-
-  try {
-    const operations = products.flatMap(product => [
-      { index: { _index: 'products', _id: product.id } },
-      {
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        category: product.category,
-        brand: product.brand,
-        price: product.price,
-        inStock: product.inStock,
-        image: product.image,
-        tags: product.tags,
-        rating: product.rating,
-        createdAt: product.createdAt
-      }
-    ]);
-
-    const result = await client.bulk({ operations, refresh: true });
-
-    if (result.errors) {
-      console.error('❌ Some products failed to index');
-    } else {
-      console.log(`✅ Indexed ${products.length} products`);
     }
+  },
+  mappings: {
+    properties: {
+      id: { type: 'keyword' },
+      name: { 
+        type: 'text',
+        analyzer: 'autocomplete',
+        search_analyzer: 'autocomplete_search',
+        fields: {
+          keyword: { type: 'keyword' },
+          suggest: { 
+            type: 'completion',
+            contexts: [
+              {
+                name: 'category',
+                type: 'category'
+              }
+            ]
+          }
+        }
+      },
+      description: { 
+        type: 'text',
+        analyzer: 'standard'
+      },
+      brand: { 
+        type: 'text',
+        fields: { 
+          keyword: { type: 'keyword' }
+        }
+      },
+      category: { type: 'keyword' },
+      subcategory: { type: 'keyword' },
+      price: { type: 'float' },
+      originalPrice: { type: 'float' },
+      discount: { type: 'integer' },
+      stock: { type: 'integer' },
+      inStock: { type: 'boolean' },
+      rating: { type: 'float' },
+      reviewCount: { type: 'integer' },
+      image: { type: 'keyword' },
+      images: { type: 'keyword' },
+      sku: { type: 'keyword' },
+      tags: { type: 'keyword' },
+      ingredients: { type: 'text' },
+      isFeatured: { type: 'boolean' },
+      isNewArrival: { type: 'boolean' },
+      isFlashSale: { type: 'boolean' },
+      isFavourite: { type: 'boolean' },
+      isRecommended: { type: 'boolean' },
+      isForYou: { type: 'boolean' },
+      createdAt: { type: 'date' },
+      updatedAt: { type: 'date' },
+    }
+  }
+};
 
-    return { success: !result.errors, count: products.length };
-  } catch (error: any) {
-    console.error('❌ Bulk index failed:', error.message);
-    return { success: false, count: 0 };
+// Helper function to check if index exists
+export async function indexExists(indexName: string): Promise<boolean> {
+  try {
+    const exists = await esClient.indices.exists({ index: indexName });
+    return exists;
+  } catch (error) {
+    console.error('Error checking index existence:', error);
+    return false;
   }
 }
 
-// Delete product
-export async function deleteProduct(productId: string) {
-  const client = getElasticsearchClient();
-
+// Helper function to delete index
+export async function deleteIndex(indexName: string): Promise<boolean> {
   try {
-    await client.delete({
-      index: 'products',
-      id: productId
-    });
+    await esClient.indices.delete({ index: indexName });
+    console.log(`Index ${indexName} deleted`);
+    return true;
+  } catch (error) {
+    console.error('Error deleting index:', error);
+    return false;
+  }
+}
 
-    console.log(`✅ Deleted product: ${productId}`);
-  } catch (error: any) {
-    console.error(`❌ Failed to delete product:`, error.message);
+// Get index stats
+export async function getIndexStats(indexName: string) {
+  try {
+    const stats = await esClient.indices.stats({ index: indexName });
+    return stats;
+  } catch (error) {
+    console.error('Error getting index stats:', error);
+    return null;
   }
 }

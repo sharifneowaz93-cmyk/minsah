@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -31,10 +31,11 @@ import {
   VolumeX,
   Filter as FilterIcon,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  TrendingUp
 } from 'lucide-react';
 
-// Pre-defined beauty product suggestions
+// Pre-defined beauty product suggestions (fallback)
 const BEAUTY_SUGGESTIONS: SuggestionItem[] = [
   { id: '1', text: 'lipstick', type: 'product', icon: <Brush className="w-4 h-4" />, count: 45 },
   { id: '2', text: 'foundation', type: 'product', icon: <Package className="w-4 h-4" />, count: 38 },
@@ -107,42 +108,19 @@ export default function AdvancedSearch({
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
 
-  // Load search history — DB first, localStorage as fallback
+  // Load search history from localStorage
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const deviceId = localStorage.getItem('device_id');
-
-    const loadHistory = async () => {
-      // Always load localStorage immediately for instant render
+    if (typeof window !== 'undefined') {
       try {
-        const local = localStorage.getItem('searchHistory');
-        if (local) {
-          setSearchState(prev => ({ ...prev, history: JSON.parse(local) }));
+        const savedHistory = localStorage.getItem('searchHistory');
+        if (savedHistory) {
+          const parsed = JSON.parse(savedHistory);
+          setSearchState(prev => ({ ...prev, history: parsed }));
         }
-      } catch {
-        // ignore
+      } catch (error) {
+        console.error('Failed to load search history:', error);
       }
-
-      // Then try DB (may have richer history from other devices)
-      if (!deviceId) return;
-      try {
-        const res = await fetch(
-          `/api/search-history?deviceId=${encodeURIComponent(deviceId)}`,
-          { credentials: 'include' }
-        );
-        if (!res.ok) return;
-        const { items } = await res.json();
-        if (Array.isArray(items) && items.length > 0) {
-          setSearchState(prev => ({ ...prev, history: items }));
-          localStorage.setItem('searchHistory', JSON.stringify(items));
-        }
-      } catch {
-        // silently fall back to localStorage
-      }
-    };
-
-    loadHistory();
+    }
   }, []);
 
   // Update URL with search parameters
@@ -154,161 +132,88 @@ export default function AdvancedSearch({
     if (filters.priceMax) params.set('max', filters.priceMax.toString());
     if (filters.inStock) params.set('stock', 'true');
 
-    const url = params.toString() ? `/shop?${params.toString()}` : '/shop';
+    const url = params.toString() ? `/search?${params.toString()}` : '/search';
     router.push(url, { scroll: false });
   }, [router]);
 
-  // Save search to history — localStorage + async DB sync
+  // Save search to history
   const saveToHistory = useCallback((term: string, resultCount: number) => {
+    if (!term.trim()) return;
+
     try {
       const newHistory: SearchHistory[] = [
         { term, timestamp: new Date(), resultCount },
-        ...searchState.history.filter(h => h.term !== term).slice(0, historyLimit - 1)
-      ];
+        ...searchState.history.filter(h => h.term !== term)
+      ].slice(0, historyLimit);
 
       setSearchState(prev => ({ ...prev, history: newHistory }));
-      localStorage.setItem('searchHistory', JSON.stringify(newHistory));
-
-      // Async sync to DB (fire-and-forget)
-      const deviceId = localStorage.getItem('device_id');
-      if (deviceId) {
-        fetch('/api/search-history', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ deviceId, items: newHistory }),
-        }).catch(() => {
-          // Silently fail — localStorage still has the data
-        });
+      
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('searchHistory', JSON.stringify(newHistory));
       }
     } catch (error) {
       console.error('Failed to save search history:', error);
     }
   }, [searchState.history, historyLimit]);
 
-  // Clear search history — localStorage + async DB sync
+  // Clear search history
   const clearHistory = useCallback(() => {
-    try {
-      setSearchState(prev => ({ ...prev, history: [] }));
+    setSearchState(prev => ({ ...prev, history: [] }));
+    if (typeof window !== 'undefined') {
       localStorage.removeItem('searchHistory');
-
-      // Async clear in DB (fire-and-forget)
-      const deviceId = localStorage.getItem('device_id');
-      if (deviceId) {
-        fetch('/api/search-history', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ deviceId }),
-        }).catch(() => {
-          // Silently fail
-        });
-      }
-    } catch (error) {
-      console.error('Failed to clear search history:', error);
     }
   }, []);
 
-  // Filter and sort products
-  const filteredResults = useMemo(() => {
-    let filtered = [...products];
-
-    // Filter by query
-    if (searchState.query.trim()) {
-      const query = searchState.query.toLowerCase();
-      filtered = filtered.filter(product =>
-        product.name.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query) ||
-        product.subcategory?.toLowerCase().includes(query) ||
-        product.description?.toLowerCase().includes(query) ||
-        product.tags?.some(tag => tag.toLowerCase().includes(query))
-      );
-    }
-
-    // Apply filters
-    if (searchState.filters.category) {
-      filtered = filtered.filter(product => product.category === searchState.filters.category);
-    }
-
-    if (searchState.filters.priceMin !== undefined) {
-      filtered = filtered.filter(product => product.price >= searchState.filters.priceMin!);
-    }
-
-    if (searchState.filters.priceMax !== undefined) {
-      filtered = filtered.filter(product => product.price <= searchState.filters.priceMax!);
-    }
-
-    if (searchState.filters.inStock !== undefined) {
-      filtered = filtered.filter(product => product.inStock === searchState.filters.inStock);
-    }
-
-    if (searchState.filters.rating !== undefined) {
-      filtered = filtered.filter(product => (product.rating || 0) >= searchState.filters.rating!);
-    }
-
-    // Sort results
-    filtered.sort((a, b) => {
-      const { value, direction } = searchState.sort;
-
-      switch (value) {
-        case 'name':
-          return direction === 'asc'
-            ? a.name.localeCompare(b.name)
-            : b.name.localeCompare(a.name);
-
-        case 'price':
-          return direction === 'asc'
-            ? a.price - b.price
-            : b.price - a.price;
-
-        case 'rating':
-          return direction === 'asc'
-            ? (a.rating || 0) - (b.rating || 0)
-            : (b.rating || 0) - (a.rating || 0);
-
-        case 'newest':
-          // Assuming newer products have higher IDs
-          return direction === 'asc'
-            ? a.id.localeCompare(b.id)
-            : b.id.localeCompare(a.id);
-
-        default:
-          return 0;
-      }
-    });
-
-    return filtered.slice(0, maxResults);
-  }, [products, searchState.query, searchState.filters, searchState.sort, maxResults]);
-
-  // Get suggestions
-  const getSuggestions = useCallback((query: string) => {
+  // ✅ ELASTICSEARCH SUGGESTIONS - Get suggestions from API
+  const getSuggestions = useCallback(async (query: string) => {
     if (!query.trim()) {
       return BEAUTY_SUGGESTIONS.slice(0, 5);
     }
 
+    try {
+      const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(query)}&limit=5`);
+      const data = await response.json();
+
+      if (data.success && data.suggestions) {
+        const apiSuggestions = data.suggestions.map((suggestion: any, index: number) => ({
+          id: `api-${index}`,
+          text: suggestion.text,
+          type: suggestion.type || 'completion',
+          icon: suggestion.type === 'product' ? <Star className="w-4 h-4" /> : 
+                suggestion.type === 'brand' ? <TrendingUp className="w-4 h-4" /> : 
+                <Search className="w-4 h-4" />,
+          product: suggestion.product,
+        }));
+
+        const queryLower = query.toLowerCase();
+        const historyMatches = searchState.history
+          .filter(h => h.term.toLowerCase().includes(queryLower))
+          .slice(0, 2)
+          .map((h, index) => ({
+            id: `history-${index}`,
+            text: h.term,
+            type: 'history' as const,
+            icon: <Clock className="w-4 h-4" />,
+            count: h.resultCount
+          }));
+
+        return [...apiSuggestions, ...historyMatches].slice(0, 5);
+      }
+    } catch (error) {
+      console.error('Suggestions error:', error);
+    }
+
     const queryLower = query.toLowerCase();
-    const filtered = BEAUTY_SUGGESTIONS.filter(suggestion =>
-      suggestion.text.toLowerCase().includes(queryLower) ||
-      suggestion.text.toLowerCase().startsWith(queryLower)
-    ).slice(0, 5);
-
-    // Add history matches
-    const historyMatches = searchState.history
-      .filter(h => h.term.toLowerCase().includes(queryLower))
-      .slice(0, 3)
-      .map((h, index) => ({
-        id: `history-${index}`,
-        text: h.term,
-        type: 'history' as const,
-        icon: <Clock className="w-4 h-4" />,
-        count: h.resultCount
-      }));
-
-    return [...filtered, ...historyMatches].slice(0, 5);
+    return BEAUTY_SUGGESTIONS
+      .filter(suggestion =>
+        suggestion.text.toLowerCase().includes(queryLower) ||
+        suggestion.text.toLowerCase().startsWith(queryLower)
+      )
+      .slice(0, 5);
   }, [searchState.history]);
 
-  // Perform search with debouncing
-  const performSearch = useCallback((query: string) => {
+  // ✅ ELASTICSEARCH INTEGRATION - Main search function
+  const performSearch = useCallback(async (query: string) => {
     setSearchState(prev => ({
       ...prev,
       query,
@@ -317,53 +222,113 @@ export default function AdvancedSearch({
       hasSearched: true
     }));
 
-    // Update suggestions
-    setSearchState(prev => ({
-      ...prev,
-      suggestions: getSuggestions(query)
-    }));
+    try {
+      const params = new URLSearchParams();
+      
+      if (query.trim()) {
+        params.set('q', query);
+      }
+      
+      if (searchState.filters.category) {
+        params.set('category', searchState.filters.category);
+      }
+      
+      if (searchState.filters.subcategory) {
+        params.set('subcategory', searchState.filters.subcategory);
+      }
+      
+      if (searchState.filters.priceMin !== undefined) {
+        params.set('minPrice', searchState.filters.priceMin.toString());
+      }
+      
+      if (searchState.filters.priceMax !== undefined) {
+        params.set('maxPrice', searchState.filters.priceMax.toString());
+      }
+      
+      if (searchState.filters.inStock) {
+        params.set('inStock', 'true');
+      }
+      
+      if (searchState.filters.rating !== undefined) {
+        params.set('rating', searchState.filters.rating.toString());
+      }
+      
+      params.set('page', '1');
+      params.set('limit', maxResults.toString());
+      
+      let sortParam = 'relevance';
+      if (searchState.sort.value === 'price') {
+        sortParam = searchState.sort.direction === 'asc' ? 'price_asc' : 'price_desc';
+      } else if (searchState.sort.value === 'newest') {
+        sortParam = 'newest';
+      } else if (searchState.sort.value === 'rating') {
+        sortParam = 'rating';
+      }
+      params.set('sort', sortParam);
 
-    // Simulate API delay
-    setTimeout(() => {
+      const response = await fetch(`/api/search?${params.toString()}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSearchState(prev => ({
+          ...prev,
+          results: data.data.products || [],
+          isLoading: false,
+        }));
+
+        if (query.trim() && data.data.products.length > 0) {
+          saveToHistory(query, data.data.products.length);
+        }
+
+        updateURL(query, searchState.filters, searchState.sort);
+        onSearch?.(query, searchState.filters, searchState.sort);
+      } else {
+        throw new Error(data.error || 'Search failed');
+      }
+    } catch (error: any) {
+      console.error('Search error:', error);
       setSearchState(prev => ({
         ...prev,
-        results: filteredResults,
-        isLoading: false
+        results: [],
+        isLoading: false,
+        error: error.message || 'Failed to search products. Please try again.',
       }));
+    }
+  }, [saveToHistory, updateURL, searchState.filters, searchState.sort, maxResults, onSearch]);
 
-      if (query.trim() && filteredResults.length > 0) {
-        saveToHistory(query, filteredResults.length);
-      }
-
-      updateURL(query, searchState.filters, searchState.sort);
-      onSearch?.(query, searchState.filters, searchState.sort);
-    }, 100);
-  }, [filteredResults, getSuggestions, saveToHistory, updateURL, searchState.filters, searchState.sort, onSearch]);
-
-  // Debounced search
+  // ✅ ASYNC DEBOUNCED SEARCH
   const debouncedSearch = useCallback((query: string) => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
 
-    debounceRef.current = setTimeout(() => {
-      performSearch(query);
+    debounceRef.current = setTimeout(async () => {
+      await performSearch(query);
     }, debounceMs);
   }, [performSearch, debounceMs]);
 
-  // Handle input change
+  // ✅ ASYNC INPUT HANDLER
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchState(prev => ({ ...prev, query: value }));
     setShowSuggestions(true);
+    
+    if (value.trim()) {
+      getSuggestions(value).then(suggestions => {
+        setSearchState(prev => ({ ...prev, suggestions }));
+      });
+    } else {
+      setSearchState(prev => ({ ...prev, suggestions: [] }));
+    }
+    
     debouncedSearch(value);
   };
 
-  // Handle suggestion click
-  const handleSuggestionClick = (suggestion: SuggestionItem) => {
+  // ✅ ASYNC SUGGESTION CLICK
+  const handleSuggestionClick = async (suggestion: SuggestionItem) => {
     setSearchState(prev => ({ ...prev, query: suggestion.text }));
     setShowSuggestions(false);
-    performSearch(suggestion.text);
+    await performSearch(suggestion.text);
     inputRef.current?.focus();
   };
 
@@ -387,10 +352,10 @@ export default function AdvancedSearch({
         setVoiceState(prev => ({ ...prev, isListening: true, error: null }));
       };
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = async (event: any) => {
         const transcript = event.results[0][0].transcript;
         setSearchState(prev => ({ ...prev, query: transcript }));
-        performSearch(transcript);
+        await performSearch(transcript);
         setVoiceState(prev => ({ ...prev, isListening: false }));
       };
 
@@ -417,7 +382,6 @@ export default function AdvancedSearch({
     }
   }, [voiceState.isSupported, voiceState.language, performSearch]);
 
-  // Stop voice search
   const stopVoiceSearch = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
@@ -439,14 +403,14 @@ export default function AdvancedSearch({
     setSearchState(prev => ({ ...prev, sort: sortOption }));
   };
 
-  // Apply filters and sort
-  const applyFilters = useCallback(() => {
-    performSearch(searchState.query);
+  // ✅ ASYNC APPLY FILTERS
+  const applyFilters = useCallback(async () => {
+    await performSearch(searchState.query);
     setShowFiltersPanel(false);
   }, [performSearch, searchState.query]);
 
-  // Clear all filters
-  const clearFilters = useCallback(() => {
+  // ✅ ASYNC CLEAR FILTERS
+  const clearFilters = useCallback(async () => {
     setSearchState(prev => ({
       ...prev,
       filters: {
@@ -458,7 +422,7 @@ export default function AdvancedSearch({
         rating: undefined
       }
     }));
-    performSearch(searchState.query);
+    await performSearch(searchState.query);
   }, [performSearch, searchState.query]);
 
   // Keyboard navigation
@@ -560,25 +524,7 @@ export default function AdvancedSearch({
                   }`}
                   aria-label={voiceState.isListening ? 'Stop voice search' : 'Start voice search'}
                 >
-                  {voiceState.isListening ? (
-                    <VolumeX className="h-5 w-5" />
-                  ) : (
-                    <Volume2 className="h-5 w-5" />
-                  )}
-                </button>
-              )}
-
-              {searchState.query && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchState(prev => ({ ...prev, query: '', results: [] }));
-                    setShowSuggestions(false);
-                  }}
-                  className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-all duration-300"
-                  aria-label="Clear search"
-                >
-                  <X className="h-5 w-5" />
+                  {voiceState.isListening ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                 </button>
               )}
 
@@ -586,75 +532,60 @@ export default function AdvancedSearch({
                 <button
                   type="button"
                   onClick={() => setShowFiltersPanel(!showFiltersPanel)}
-                  className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all duration-300"
+                  className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-all duration-300"
                   aria-label="Toggle filters"
                 >
                   <FilterIcon className="h-5 w-5" />
+                </button>
+              )}
+
+              {searchState.query && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchState(prev => ({ ...prev, query: '', results: [], hasSearched: false }));
+                    inputRef.current?.focus();
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-300"
+                  aria-label="Clear search"
+                >
+                  <X className="h-5 w-5" />
                 </button>
               )}
             </div>
           </div>
 
           {/* Suggestions Dropdown */}
-          {showSuggestions && (
+          {showSuggestions && searchState.suggestions.length > 0 && (
             <div
               ref={suggestionsRef}
-              className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto"
-              role="listbox"
+              className="absolute z-10 w-full mt-2 bg-white rounded-lg shadow-lg border border-gray-200 max-h-96 overflow-y-auto"
             >
-              {searchState.suggestions.length > 0 ? (
-                <div className="py-2">
-                  {searchState.suggestions.map((suggestion, index) => (
-                    <button
-                      key={suggestion.id}
-                      onClick={() => handleSuggestionClick(suggestion)}
-                      className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors duration-200 flex items-center gap-3 ${
-                        index === activeSuggestionIndex ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                      }`}
-                      role="option"
-                      aria-selected={index === activeSuggestionIndex}
-                    >
-                      <span className="text-xl flex-shrink-0">{suggestion.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-900 truncate">{suggestion.text}</div>
-                        <div className="text-sm text-gray-500 capitalize">{suggestion.type}</div>
-                      </div>
-                      {suggestion.count && (
-                        <div className="text-sm text-gray-400">{suggestion.count} results</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ) : searchState.query ? (
-                <div className="p-4 text-center text-gray-500">
-                  <Search className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                  <p>No suggestions found for "{searchState.query}"</p>
-                </div>
-              ) : null}
+              {searchState.suggestions.map((suggestion, index) => (
+                <button
+                  key={suggestion.id}
+                  onClick={() => handleSuggestionClick(suggestion)}
+                  className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors duration-300 ${
+                    index === activeSuggestionIndex ? 'bg-gray-50' : ''
+                  }`}
+                >
+                  <span className="text-gray-400">{suggestion.icon}</span>
+                  <span className="flex-1 text-left text-gray-700">{suggestion.text}</span>
+                  {suggestion.count && (
+                    <span className="text-xs text-gray-400">{suggestion.count} items</span>
+                  )}
+                </button>
+              ))}
             </div>
           )}
         </div>
-
-        {/* Voice Search Error */}
-        {voiceState.error && (
-          <div className="mt-2 p-2 bg-red-100 text-red-700 rounded-lg text-sm" role="alert">
-            {voiceState.error}
-          </div>
-        )}
-
-        {/* Search Error */}
-        {searchState.error && (
-          <div className="mt-2 p-2 bg-red-100 text-red-700 rounded-lg text-sm" role="alert">
-            {searchState.error}
-          </div>
-        )}
       </div>
 
       {/* Filters Panel */}
-      {showFilters && showFiltersPanel && (
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+      {showFiltersPanel && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-4">
           <h3 className="text-lg font-semibold mb-4">Filters</h3>
-
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Category Filter */}
             <div>
@@ -662,11 +593,11 @@ export default function AdvancedSearch({
               <select
                 value={searchState.filters.category || ''}
                 onChange={(e) => handleFilterChange('category', e.target.value || undefined)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">All Categories</option>
-                {categories.map(category => (
-                  <option key={category.id} value={category.name}>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.slug}>
                     {category.name}
                   </option>
                 ))}
@@ -675,58 +606,61 @@ export default function AdvancedSearch({
 
             {/* Price Range */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Min"
-                  value={searchState.filters.priceMin || ''}
-                  onChange={(e) => handleFilterChange('priceMin', e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-1/2 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <input
-                  type="number"
-                  placeholder="Max"
-                  value={searchState.filters.priceMax || ''}
-                  onChange={(e) => handleFilterChange('priceMax', e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-1/2 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Min Price</label>
+              <input
+                type="number"
+                value={searchState.filters.priceMin || ''}
+                onChange={(e) => handleFilterChange('priceMin', e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="0"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
 
-            {/* Stock Status */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Stock Status</label>
-              <select
-                value={searchState.filters.inStock === undefined ? '' : searchState.filters.inStock.toString()}
-                onChange={(e) => handleFilterChange('inStock', e.target.value === 'true' ? true : e.target.value === 'false' ? false : undefined)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Products</option>
-                <option value="true">In Stock</option>
-                <option value="false">Out of Stock</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Max Price</label>
+              <input
+                type="number"
+                value={searchState.filters.priceMax || ''}
+                onChange={(e) => handleFilterChange('priceMax', e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="10000"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
 
-            {/* Sort Options */}
+            {/* In Stock */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
-              <select
-                value={`${searchState.sort.value}-${searchState.sort.direction}`}
-                onChange={(e) => {
-                  const [value, direction] = e.target.value.split('-');
-                  const option = SORT_OPTIONS.find(opt => opt.value === value && opt.direction === direction) || SORT_OPTIONS[0];
-                  handleSortChange(option);
-                }}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {SORT_OPTIONS.map(option => (
-                  <option key={`${option.value}-${option.direction}`} value={`${option.value}-${option.direction}`}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Availability</label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={searchState.filters.inStock || false}
+                  onChange={(e) => handleFilterChange('inStock', e.target.checked || undefined)}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700">In Stock Only</span>
+              </label>
             </div>
+          </div>
+
+          {/* Sort Options */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+            <select
+              value={`${searchState.sort.value}-${searchState.sort.direction}`}
+              onChange={(e) => {
+                const option = SORT_OPTIONS.find(opt => 
+                  `${opt.value}-${opt.direction}` === e.target.value
+                );
+                if (option) handleSortChange(option);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {SORT_OPTIONS.map((option, index) => (
+                <option key={index} value={`${option.value}-${option.direction}`}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Filter Actions */}
@@ -790,145 +724,75 @@ export default function AdvancedSearch({
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">
               {searchState.query
-                ? `Search Results for "${searchState.query}"`
-                : 'All Products'
-              }
-              <span className="text-sm font-normal text-gray-500 ml-2">
-                ({filteredResults.length} results)
-              </span>
+                ? `Search results for "${searchState.query}"`
+                : 'All Products'}
             </h2>
-
-            {/* Quick Sort */}
-            <div className="hidden md:flex items-center gap-2">
-              <span className="text-sm text-gray-600">Sort:</span>
-              {['name', 'price', 'rating'].map((sortValue) => (
-                <button
-                  key={sortValue}
-                  onClick={() => handleSortChange({
-                    ...SORT_OPTIONS.find(opt => opt.value === sortValue)!,
-                    direction: searchState.sort.value === sortValue && searchState.sort.direction === 'asc' ? 'desc' : 'asc'
-                  })}
-                  className={`px-3 py-1 text-sm rounded-lg transition-colors duration-300 ${
-                    searchState.sort.value === sortValue
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {sortValue.charAt(0).toUpperCase() + sortValue.slice(1)}
-                  {searchState.sort.value === sortValue && (
-                    <span className="ml-1">
-                      {searchState.sort.direction === 'asc' ? <ChevronUp className="w-4 h-4 inline" /> : <ChevronDown className="w-4 h-4 inline" />}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <span className="text-sm text-gray-600">
+              {searchState.results.length} {searchState.results.length === 1 ? 'result' : 'results'}
+            </span>
           </div>
 
-          {/* Results Grid */}
-          {filteredResults.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredResults.map((product) => {
-                const bdtPrice = convertUSDtoBDT(product.price);
-                const bdtOriginalPrice = product.originalPrice ? convertUSDtoBDT(product.originalPrice) : undefined;
-                const discount = product.originalPrice
-                  ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-                  : 0;
-
-                return (
-                  <div
-                    key={product.id}
-                    className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer"
-                    onClick={() => onProductClick?.(product)}
-                  >
-                    {/* Product Image */}
-                    <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
-                        <Brush className="w-16 h-16 text-pink-400" />
-                      </div>
-                      {discount > 0 && (
-                        <div className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
-                          -{discount}%
-                        </div>
-                      )}
-                      {!product.inStock && (
-                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                          <span className="text-white font-semibold">Out of Stock</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Product Info */}
-                    <div className="p-4">
-                      <div className="mb-2">
-                        <span className="text-xs text-gray-500 uppercase tracking-wide">
-                          {product.category}
-                        </span>
-                      </div>
-                      <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
-                        {product.name}
-                      </h3>
-                      {product.description && (
-                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                          {product.description}
-                        </p>
-                      )}
-
-                      {/* Rating */}
-                      {product.rating && (
-                        <div className="flex items-center mb-2">
-                          <div className="flex items-center">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`h-4 w-4 ${
-                                  i < Math.floor(product.rating!)
-                                    ? 'text-yellow-400 fill-current'
-                                    : 'text-gray-300 fill-current'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          <span className="text-sm text-gray-600 ml-1">
-                            {product.rating.toFixed(1)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Price */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-blue-600">
-                            {formatPrice(bdtPrice)}
-                          </span>
-                          {bdtOriginalPrice && (
-                            <span className="text-sm text-gray-400 line-through">
-                              {formatPrice(bdtOriginalPrice)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            /* No Results */
-            <div className="text-center py-12">
-              <Search className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
-              <p className="text-gray-500 mb-4">
-                Try adjusting your search terms or filters
-              </p>
-              <button
-                onClick={clearFilters}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-300"
-              >
-                Clear Filters
-              </button>
+          {/* Error Message */}
+          {searchState.error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <p className="text-red-700">{searchState.error}</p>
             </div>
           )}
+
+          {/* Results Grid */}
+          {searchState.results.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {searchState.results.map((product) => (
+                <div
+                  key={product.id}
+                  className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+                  onClick={() => onProductClick?.(product)}
+                >
+                  {product.image && (
+                    <div className="relative aspect-square mb-3">
+                      <Image
+                        src={product.image}
+                        alt={product.name}
+                        fill
+                        className="object-cover rounded-lg"
+                      />
+                    </div>
+                  )}
+                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
+                    {product.name}
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-2">{product.category}</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-lg font-bold text-blue-600">
+                        {formatPrice(convertUSDtoBDT(product.price))}
+                      </span>
+                      {product.originalPrice && (
+                        <span className="text-sm text-gray-400 line-through ml-2">
+                          {formatPrice(convertUSDtoBDT(product.originalPrice))}
+                        </span>
+                      )}
+                    </div>
+                    {product.rating && (
+                      <div className="flex items-center gap-1">
+                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                        <span className="text-sm text-gray-600">{product.rating.toFixed(1)}</span>
+                      </div>
+                    )}
+                  </div>
+                  {!product.inStock && (
+                    <p className="text-sm text-red-600 mt-2">Out of Stock</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : !searchState.isLoading ? (
+            <div className="text-center py-12">
+              <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">No products found</h3>
+              <p className="text-gray-600">Try adjusting your search or filters</p>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
