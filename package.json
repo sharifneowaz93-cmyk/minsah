@@ -21,7 +21,7 @@
     "db:reset": "prisma migrate reset",
     "gemini": "node gemini-cli.js",
     "gemini:interactive": "node gemini-cli.js --interactive",
-     "elasticsearch:init": "tsx scripts/init-elasticsearch.ts",
+    "elasticsearch:init": "tsx scripts/init-elasticsearch.ts",
     "elasticsearch:reindex": "tsx scripts/reindex-elasticsearch.ts",
     "elasticsearch:test": "tsx scripts/test-elasticsearch.ts"
   },
