@@ -120,7 +120,7 @@ export async function indexAllProducts() {
     
     // Get all visible products from Prisma
     const products = await prisma.product.findMany({
-      where: { isVisible: true },
+      where: { isActive: true },
       select: {
         id: true,
         name: true,
