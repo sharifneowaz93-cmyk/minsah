@@ -131,70 +131,55 @@ export async function GET(request: NextRequest) {
 
     // Execute search
     const response = await esClient.search({
-      index: PRODUCT_INDEX,
-      body: {
-        query: {
-          bool: {
-            must,
-            filter,
-            should,
-            minimum_should_match: should.length > 0 ? 0 : undefined,
-          }
-        },
-        from: (page - 1) * limit,
-        size: limit,
-        sort: sortOrder,
-        highlight: {
-          fields: {
-            name: {
-              pre_tags: ['<mark>'],
-              post_tags: ['</mark>'],
-            },
-            description: {
-              pre_tags: ['<mark>'],
-              post_tags: ['</mark>'],
-              fragment_size: 150,
-              number_of_fragments: 3,
-            },
-          }
-        },
-        // Aggregations for faceted search
-        aggs: {
-          categories: {
-            terms: { 
-              field: 'category',
-              size: 20 
-            }
-          },
-          brands: {
-            terms: { 
-              field: 'brand.keyword',
-              size: 20 
-            }
-          },
-          price_ranges: {
-            range: {
-              field: 'price',
-              ranges: [
-                { key: 'Under 500', to: 500 },
-                { key: '500-1000', from: 500, to: 1000 },
-                { key: '1000-2000', from: 1000, to: 2000 },
-                { key: '2000-5000', from: 2000, to: 5000 },
-                { key: 'Over 5000', from: 5000 },
-              ]
-            }
-          },
-          avg_price: {
-            avg: { field: 'price' }
-          },
-          min_price: {
-            min: { field: 'price' }
-          },
-          max_price: {
-            max: { field: 'price' }
-          },
-        }
+  index: PRODUCT_INDEX,
+  query: {
+    bool: {
+      must,
+      filter,
+      should,
+      minimum_should_match: should.length > 0 ? 0 : undefined,
+    }
+  },
+  from: (page - 1) * limit,
+  size: limit,
+  sort: sortOrder,
+  highlight: {
+    fields: {
+      name: {
+        pre_tags: ['<mark>'],
+        post_tags: ['</mark>'],
+      },
+      description: {
+        pre_tags: ['<mark>'],
+        post_tags: ['</mark>'],
+        fragment_size: 150,
+        number_of_fragments: 3,
+      },
+    }
+  },
+  aggs: {
+    categories: {
+      terms: { field: 'category', size: 20 }
+    },
+    brands: {
+      terms: { field: 'brand.keyword', size: 20 }
+    },
+    price_ranges: {
+      range: {
+        field: 'price',
+        ranges: [
+          { key: 'Under 500', to: 500 },
+          { key: '500-1000', from: 500, to: 1000 },
+          { key: '1000-2000', from: 1000, to: 2000 },
+          { key: '2000-5000', from: 2000, to: 5000 },
+          { key: 'Over 5000', from: 5000 },
+        ]
       }
+    },
+    avg_price: { avg: { field: 'price' } },
+    min_price: { min: { field: 'price' } },
+    max_price: { max: { field: 'price' } },
+  }
     });
 
     const hits = response.hits.hits;
