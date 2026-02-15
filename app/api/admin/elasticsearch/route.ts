@@ -28,8 +28,11 @@ export async function GET(request: NextRequest) {
       }
 
       // Get database product count
+      // const dbProductCount = await prisma.product.count({
+      //   where: { isVisible: true }
+      // });
       const dbProductCount = await prisma.product.count({
-        where: { isVisible: true }
+        where: { isActive: true }
       });
 
       return NextResponse.json({
